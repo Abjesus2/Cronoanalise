@@ -1910,12 +1910,6 @@
       <div class="navbar-actions">
         <div class="navbar-shortcuts">
           <button class="btn btn-outline-light btn-sm" onclick="navToHome()" title="Início" data-bs-placement="bottom" aria-label="Início"><i class="fa-solid fa-house me-1" aria-hidden="true"></i><span class="navbar-home-label">Início</span></button>
-          <!-- Botão "Abrir em nova aba" só aparece quando a página está embutida (Google Sites, etc.).
-               No iframe do Sites, impressão, downloads, teclado e modais funcionam pior — a nova aba resolve. -->
-          <a id="btnAbrirNovaAba" class="btn btn-outline-warning btn-sm" hidden target="_blank" rel="noopener" title="Abrir esta ferramenta em uma nova aba (recomendado ao usar via Google Sites)" aria-label="Abrir em nova aba">
-            <i class="fa-solid fa-up-right-from-square me-1" aria-hidden="true"></i><span class="navbar-newtab-label">Abrir em nova aba</span>
-          </a>
-
           <div class="dropdown change-history-dropdown">
             <button class="btn btn-outline-light btn-sm dropdown-toggle change-history-button" id="btnHistoricoAlteracoes" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Central de notificações" data-bs-placement="bottom" aria-label="Abrir central de notificações">
               <i class="fa-solid fa-bell" id="notificationMainIcon" aria-hidden="true"></i>
@@ -2857,14 +2851,6 @@
     // Ao publicar uma nova versão, atualize APP_VERSION para facilitar o diagnóstico ("qual versão você está usando?").
     const APP_VERSION = "2026-09-02.2";
 
-    // URL pública que o botão "Abrir em nova aba" deve abrir.
-    // Cole aqui o link da página do Google Sites que embute esta ferramenta
-    // (ex.: "https://sites.google.com/view/sua-empresa/cronoanalise").
-    // Dentro do iframe do Google Sites, window.location.href aponta para uma URL interna
-    // do Google (googleusercontent.com) que não abre a página real — por isso o botão precisa
-    // saber a URL correta. Deixe em branco ("") para o botão não aparecer.
-    const PAGE_URL = "https://sites.google.com/view/crono-analise/cronoanalise";
-
     // Wrapper de armazenamento tolerante a iframes do Google Sites.
     // O Chrome (Privacy Sandbox) bloqueia localStorage em iframes de terceiros;
     // sem esse wrapper cada leitura/gravação lança SecurityError e derruba a UI.
@@ -3122,7 +3108,6 @@
     document.addEventListener("DOMContentLoaded", () => {
       // Mantém a sequência de inicialização comprovadamente funcional da v23.
       // Recursos visuais novos são isolados para nunca impedirem a leitura da planilha.
-      configurarBotaoAbrirNovaAba_();
       initTheme();
       inicializarPreferenciasTempo();
       configurarMenusVisualizacaoTempo();
@@ -7857,35 +7842,6 @@
       return !!(opcoes && (opcoes.descricao || opcoes.criterios || opcoes.consideracoes));
     }
 
-    // Só exibe o botão quando: (a) a página está embutida em outro site (iframe do Google Sites)
-    // e (b) você configurou PAGE_URL com a URL pública da página que embute a ferramenta.
-    // Dentro do iframe cross-origin do Sites não é possível descobrir a URL do site pai
-    // automaticamente (o navegador bloqueia por segurança), então a URL precisa ser explícita.
-    function configurarBotaoAbrirNovaAba_() {
-      const botao = document.getElementById('btnAbrirNovaAba');
-      if (!botao) return;
-      let embutido = false;
-      try { embutido = window.self !== window.top; } catch (_) { embutido = true; }
-      const urlConfigurada = String(PAGE_URL || '').trim();
-      if (!embutido || !urlConfigurada) { botao.hidden = true; return; }
-      botao.href = urlConfigurada;
-      botao.target = '_blank';
-      botao.rel = 'noopener';
-      // Alguns navegadores/bloqueadores impedem <a target="_blank"> disparado indiretamente.
-      // O onclick garante que a nova aba abra mesmo assim, mantendo o href como fallback acessível.
-      botao.addEventListener('click', function(evento) {
-        evento.preventDefault();
-        const janela = window.open(urlConfigurada, '_blank', 'noopener');
-        if (!janela) {
-          // Pop-up bloqueado — cai para navegação do próprio iframe (sai do embed).
-          try { window.top.location.href = urlConfigurada; } catch (_) {
-            window.location.href = urlConfigurada;
-          }
-        }
-      });
-      botao.hidden = false;
-    }
-
     // Marca a versão do aplicativo em um data-attribute do <body> e loga no console
     // para diagnóstico rápido ("qual versão você está usando?" -> "abre F12 e me diga o console").
     (function marcarVersaoDoApp_() {
@@ -12282,8 +12238,7 @@
           : `<div class="mb-3"><strong class="small text-muted">Detalhamento</strong><div class="flow-detail-description mt-1">${escapeHTML(no.detail || meta.description || 'Nenhum detalhamento informado.')}</div></div>`}
         ${parametros}
         <div class="flow-detail-actions mt-3">
-          ${atividadeOriginal ? `<button class="btn btn-primary btn-sm" type="button" onclick="abrirAtividadeDoFluxograma('${escapeHTML(meta.entityId)}')"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Abrir atividade neste sistema</button>
-          <button class="btn btn-outline-primary btn-sm" type="button" onclick="abrirAtividadeNovaAba('${escapeHTML(meta.entityId)}')"><i class="fa-solid fa-up-right-from-square me-1"></i>Abrir atividade em nova aba</button>` : ''}
+          ${atividadeOriginal ? `<button class="btn btn-primary btn-sm" type="button" onclick="abrirAtividadeDoFluxograma('${escapeHTML(meta.entityId)}')"><i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Abrir atividade neste sistema</button>` : ''}
           ${editavel ? `<button class="btn btn-outline-info btn-sm" type="button" onclick="iniciarConexaoAPartirDe('${escapeHTML(no.id)}')"><i class="fa-solid fa-link me-1"></i>Conectar este campo a outro</button>` : ''}
         </div>`;
       aplicarEstadoPaineisInformacaoAtividade(conteudo);
@@ -13237,44 +13192,6 @@
       state.selectedAnalise = analise;
       openAnaliseDetails(analise.ID_Analise);
       return true;
-    }
-
-    function abrirAtividadeNovaAba(idAnalise) {
-      const analise = state.analises.find(item => valorComparavel(item.ID_Analise) === valorComparavel(idAnalise));
-      if (!analise) {
-        customAlert('A atividade não está mais disponível nos dados carregados.', 'Atividade não encontrada');
-        return;
-      }
-      try {
-        const url = new URL(window.location.href);
-        if (['http:', 'https:'].includes(url.protocol)) {
-          url.hash = new URLSearchParams({ 'crono-atividade': String(analise.ID_Analise) }).toString();
-          const novaAba = window.open(url.toString(), '_blank');
-          if (novaAba) {
-            try { novaAba.opener = null; } catch (erro) {}
-            return;
-          }
-        }
-      } catch (erro) {}
-      abrirResumoAtividadeNovaAba(analise);
-    }
-
-    function abrirResumoAtividadeNovaAba(analise) {
-      const novaAba = window.open('', '_blank');
-      if (!novaAba) {
-        customAlert('O navegador bloqueou a nova aba. Permita pop-ups para este site e tente novamente.', 'Nova aba bloqueada');
-        return;
-      }
-      try { novaAba.opener = null; } catch (erro) {}
-      const parametros = [];
-      for (let indice = 1; indice <= 8; indice++) {
-        if (analise[`Campo_${indice}_Nome`]) parametros.push(`<li>${escapeHTML(analise[`Campo_${indice}_Nome`])} (${escapeHTML(analise[`Campo_${indice}_Tipo`] || 'texto')})</li>`);
-      }
-      novaAba.document.open();
-      const resumoCriterios = String(analise.Criterios_Medicao || '').trim();
-      const resumoConsideracoes = String(analise.Consideracoes_Atividade || '').trim();
-      novaAba.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(analise.Atividade)}</title><style>body{font-family:Segoe UI,Arial,sans-serif;background:#f8fafc;color:#1e293b;margin:0;padding:28px}.box{max-width:850px;margin:auto;background:#fff;border-radius:16px;padding:26px;box-shadow:0 10px 30px rgba(15,23,42,.12)}.tag{display:inline-block;background:#2563eb;color:#fff;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:700}.grid{display:grid;grid-template-columns:150px 1fr;gap:8px;margin:18px 0}.grid strong{color:#64748b}.info{border:1px solid #cbd5e1;border-radius:10px;margin:10px 0;overflow:hidden}.info-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;font-weight:700;background:#f8fafc;border-bottom:1px solid #e2e8f0;cursor:pointer;user-select:none}.info-head:hover{background:#eff6ff}.info.collapsed .info-head{border-bottom:0}.info-body{white-space:pre-wrap;padding:12px;line-height:1.6;max-height:240px;overflow-y:auto}.info.collapsed .info-body{display:none}.toggle{width:30px;height:28px;padding:0;background:#fff;color:#334155;border:1px solid #cbd5e1}.info.collapsed .toggle{transform:rotate(-90deg)}.actions{margin-top:22px}.actions button{border:0;border-radius:8px;padding:10px 16px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer}@media(max-width:600px){body{padding:10px}.box{padding:18px}.grid{grid-template-columns:1fr;gap:2px}}</style><script>const estado={detalhamento:false,criterios:false,consideracoes:false};function aplicar(){document.querySelectorAll('[data-t]').forEach(b=>{const aberto=estado[b.dataset.t]!==false;b.classList.toggle('collapsed',!aberto);const corpo=b.querySelector('.info-body');if(corpo)corpo.hidden=!aberto;const bt=b.querySelector('.toggle');if(bt){bt.setAttribute('aria-expanded',aberto?'true':'false');bt.title=aberto?'Ocultar texto':'Expandir texto'}})}function alternar(t){estado[t]=!(estado[t]!==false);aplicar()}addEventListener('DOMContentLoaded',aplicar);<\/script></head><body><main class="box"><span class="tag">ATIVIDADE</span><h1>${escapeHTML(analise.Atividade)}</h1><div class="grid"><strong>Área</strong><span>${escapeHTML(analise.Area)}</span><strong>Setor</strong><span>${escapeHTML(analise.Setor)}</span><strong>Sequência</strong><span>${normalizarSequencia(analise.Sequencia_Atividade) != null ? `#${normalizarSequencia(analise.Sequencia_Atividade)}` : 'Não informada'}</span></div><section class="info collapsed" data-t="detalhamento"><div class="info-head" role="button" tabindex="0" onclick="alternar('detalhamento')" onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();alternar('detalhamento')}"><span>Detalhamento da Atividade</span><button class="toggle" onclick="event.stopPropagation();alternar('detalhamento')" aria-label="Ocultar ou expandir Detalhamento da Atividade">⌄</button></div><div class="info-body" hidden>${escapeHTML(analise.Descricao_Atividade || 'Nenhum detalhamento informado.')}</div></section>${resumoCriterios ? `<section class="info collapsed" data-t="criterios"><div class="info-head" role="button" tabindex="0" onclick="alternar('criterios')" onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();alternar('criterios')}"><span>Critérios de medição</span><button class="toggle" onclick="event.stopPropagation();alternar('criterios')" aria-label="Ocultar ou expandir Critérios de medição">⌄</button></div><div class="info-body" hidden>${escapeHTML(resumoCriterios)}</div></section>` : ''}${resumoConsideracoes ? `<section class="info collapsed" data-t="consideracoes"><div class="info-head" role="button" tabindex="0" onclick="alternar('consideracoes')" onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();alternar('consideracoes')}"><span>Considerações sobre a atividade</span><button class="toggle" onclick="event.stopPropagation();alternar('consideracoes')" aria-label="Ocultar ou expandir Considerações sobre a atividade">⌄</button></div><div class="info-body" hidden>${escapeHTML(resumoConsideracoes)}</div></section>` : ''}${parametros.length ? `<h3>Parâmetros</h3><ul>${parametros.join('')}</ul>` : ''}<div class="actions"><button onclick="window.print()">Imprimir ou salvar em PDF</button></div></main></body></html>`);
-      novaAba.document.close();
     }
 
     function nomeArquivoFluxograma(extensao) {
