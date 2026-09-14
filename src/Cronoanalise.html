@@ -10164,9 +10164,10 @@
     function applyDashFilters() {
       const area = document.getElementById('filterArea').value, setor = document.getElementById('filterSetor').value, atividade = document.getElementById('filterAtividade').value;
       let filteredAnalises = state.analises.filter(a => (!area || a.Area === area) && (!setor || a.Setor === setor) && (!atividade || a.Atividade === atividade));
-      let ids = filteredAnalises.map(a => a.ID_Analise);
-      let filteredContagens = state.allContagens.filter(c => ids.includes(c.ID_Analise));
+      let idsSet = new Set(filteredAnalises.map(a => valorComparavel(a.ID_Analise)));
+      let filteredContagens = state.allContagens.filter(c => idsSet.has(valorComparavel(c.ID_Analise)));
       state.dashFilteredContagens = filteredContagens;
+      const contagensPorAnaliseFiltradas = indexarContagensPorAnaliseFluxograma(filteredContagens);
 
       document.getElementById('dashTotalMedicoes').innerText = filteredContagens.length;
       let tempos = filteredContagens.map(c => parseTimeToSeconds(c.Tempo_Total));
@@ -10197,7 +10198,7 @@
       else if (stats.cv <= 25) cardCV.classList.add('bg-warning', 'text-dark');
       else cardCV.classList.add('bg-danger', 'text-white');
 
-      renderCharts(filteredAnalises, filteredContagens);
+      renderCharts(filteredAnalises, filteredContagens, contagensPorAnaliseFiltradas);
     }
 
     function calcularEstatisticas(tempos) {
@@ -10228,12 +10229,12 @@
       return { labels, data };
     }
 
-    function renderCharts(filteredAnalises, filteredContagens) {
+    function renderCharts(filteredAnalises, filteredContagens, contagensPorAnalise = indexarContagensPorAnaliseFluxograma(filteredContagens)) {
       Chart.defaults.color = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? '#cbd5e1' : '#475569';
-      
+
       const labelsAtiv = filteredAnalises.map(a => a.Atividade);
       const dataAtiv = filteredAnalises.map(a => {
-        let cs = filteredContagens.filter(c => c.ID_Analise === a.ID_Analise), t = cs.map(c => parseTimeToSeconds(c.Tempo_Total));
+        let cs = contagensPorAnalise.get(valorComparavel(a.ID_Analise)) || [], t = cs.map(c => parseTimeToSeconds(c.Tempo_Total));
         return t.length ? arredondarTempoParaModo(t.reduce((acc, b) => acc + b, 0) / t.length) : 0;
       });
 
@@ -10253,7 +10254,9 @@
       });
 
       const areas = [...new Set(filteredAnalises.map(a => a.Area))], dataAreas = areas.map(ar => {
-        let aIds = filteredAnalises.filter(a => a.Area === ar).map(a => a.ID_Analise); return filteredContagens.filter(c => aIds.includes(c.ID_Analise)).length;
+        return filteredAnalises
+          .filter(a => a.Area === ar)
+          .reduce((soma, a) => soma + (contagensPorAnalise.get(valorComparavel(a.ID_Analise)) || []).length, 0);
       });
 
       if (chart2) chart2.destroy();
@@ -10270,7 +10273,7 @@
         chart4 = new Chart(canvasTendencia, { type: 'line', data: { labels: tendencia.labels, datasets: [{ label: 'Medições/dia', data: tendencia.data, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', tension: 0.3, fill: true }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
       } else { canvasTendencia.style.display = 'none'; emptyMsg.style.display = 'block'; }
 
-      renderResumoEstatistico(filteredAnalises, filteredContagens);
+      renderResumoEstatistico(filteredAnalises, filteredContagens, contagensPorAnalise);
     }
 
     function calcularCapacidadeHora(analise, contagens, tempoPadraoSegundos) {
@@ -10306,11 +10309,11 @@
       };
     }
 
-    function renderResumoEstatistico(filteredAnalises, filteredContagens) {
+    function renderResumoEstatistico(filteredAnalises, filteredContagens, contagensPorAnalise = indexarContagensPorAnaliseFluxograma(filteredContagens)) {
       const tbody = document.getElementById('dashResumoTableBody'); if (!tbody) return; tbody.innerHTML = '';
-      
+
       const linhasCalculadas = filteredAnalises.map(a => {
-        const cs = filteredContagens.filter(c => c.ID_Analise === a.ID_Analise), tempos = cs.map(c => parseTimeToSeconds(c.Tempo_Total)), stats = calcularEstatisticas(tempos);
+        const cs = contagensPorAnalise.get(valorComparavel(a.ID_Analise)) || [], tempos = cs.map(c => parseTimeToSeconds(c.Tempo_Total)), stats = calcularEstatisticas(tempos);
         
         let somaPausasSec = 0;
         if (a.Paradas_Aplicaveis) {
@@ -10452,6 +10455,7 @@
 
     function montarDadosExportacaoDe(contagens) {
       const analisesPorId = new Map(state.analises.map(analise => [String(analise.ID_Analise), analise]));
+      const contagensPorAnalise = indexarContagensPorAnaliseFluxograma();
       const idsComContagem = new Set(contagens.map(contagem => String(contagem.ID_Analise)));
       const analisesExportadas = state.analises.filter(analise => idsComContagem.has(String(analise.ID_Analise)));
       const catalogoParametros = obterCatalogoParametrosRelatorio(analisesExportadas);
@@ -10476,7 +10480,7 @@
 
       return contagensOrdenadas.map(({ contagem: c, analise: a }) => {
         const parsedObs = decodeObs(c.Observacoes);
-        const analiseContagens = state.allContagens.filter(x => x.ID_Analise === a.ID_Analise);
+        const analiseContagens = contagensPorAnalise.get(valorComparavel(a.ID_Analise)) || [];
         const calcRitmo = calcularRitmoEUnitario(c, a, analiseContagens);
         const tempoUnidade = calcularTempoPorUnidade(c, a);
         const linha = {
@@ -10778,9 +10782,13 @@
       const cabecalhoTempoTotal = obterCabecalhoTempoExportacao('Tempo cronometrado');
       const cabecalhoTempoUnidade = obterCabecalhoTempoExportacao('Tempo por unidade');
       const codigosEstrutura = criarMapaCodigosEstruturaDocx(analises);
+      const contagensPorAnaliseExportadas = indexarContagensPorAnaliseFluxograma(contagens);
+      const contagensPorAnaliseCompleta = indexarContagensPorAnaliseFluxograma();
 
       analises.forEach((analise, indiceAnalise) => {
-        const contagensAtividade = ordenarContagensDocx(contagens.filter(contagem => String(contagem.ID_Analise) === String(analise.ID_Analise)));
+        const contagensAtividade = ordenarContagensDocx(
+          contagensPorAnaliseExportadas.get(valorComparavel(analise.ID_Analise)) || []
+        );
         if (!contagensAtividade.length) return;
         const codigo = codigosEstrutura.get(String(analise.ID_Analise || '')) || obterCodigoEstruturaDocx(analise);
         elementos.push(criarTituloSecaoDocx(docxApi, `${codigo} — ${textoDocx(analise.Atividade, 'Atividade sem nome')}`, 2, { novaPagina: indiceAnalise > 0 }));
@@ -10802,7 +10810,7 @@
         ]));
         elementos.push(criarParagrafoDocx(docxApi, 'Detalhamento das contagens', { negrito: true, tamanho: 23, cor: '1D4ED8', espacoDepois: 80 }));
 
-        const todasContagensDaAnalise = state.allContagens.filter(contagem => String(contagem.ID_Analise) === String(analise.ID_Analise));
+        const todasContagensDaAnalise = contagensPorAnaliseCompleta.get(valorComparavel(analise.ID_Analise)) || [];
         contagensAtividade.forEach((contagem, indiceContagem) => {
           const observacao = decodeObs(contagem.Observacoes);
           const tempoUnidade = calcularTempoPorUnidade(contagem, analise);
@@ -11289,9 +11297,9 @@
       };
     }
 
-    function indexarContagensPorAnaliseFluxograma() {
+    function indexarContagensPorAnaliseFluxograma(contagens = state.allContagens) {
       const indice = new Map();
-      state.allContagens.forEach(contagem => {
+      contagens.forEach(contagem => {
         const chave = valorComparavel(contagem.ID_Analise);
         if (!indice.has(chave)) indice.set(chave, []);
         indice.get(chave).push(contagem);
