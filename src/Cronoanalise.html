@@ -3218,7 +3218,8 @@
         salvarSnapshotLocal();
       });
       window.addEventListener('beforeunload', evento => {
-        if (syncQueue.length > 0 && !syncQueuePersistenceAvailable) {
+        const filaEmRisco = syncQueue.length > 0 && !syncQueuePersistenceAvailable;
+        if (filaEmRisco || haMedicaoNaoSalvaNoCronometro()) {
           evento.preventDefault();
           evento.returnValue = '';
         }
@@ -5518,11 +5519,13 @@
       atualizarIndicadorUltimaAtualizacao();
     }
 
-    // A atualização manual recarrega os dados da planilha por cima do estado atual. Se o
-    // cronômetro tiver uma medição em andamento (rodando, parada mas não salva, ou ainda
-    // sincronizando), a atividade selecionada pode ser substituída ou removida durante a
-    // aplicação dos novos dados — o que reinicia o cronômetro e perde a medição. Por isso,
-    // nesse cenário específico, confirmamos com a pessoa antes de prosseguir.
+    // Recarregar os dados (pelo botão "Atualizar dados" ou por um F5/fechar a aba/recarregar
+    // a página) substitui o estado atual pelos dados da planilha. Se o cronômetro tiver uma
+    // medição em andamento (rodando, parada mas não salva, ou ainda sincronizando), a
+    // atividade selecionada pode ser substituída ou removida durante essa troca — o que
+    // reinicia o cronômetro e perde a medição. Usada tanto pela atualização manual (para
+    // confirmar antes de prosseguir) quanto pelo listener de beforeunload (para avisar antes
+    // de sair da página).
     function haMedicaoNaoSalvaNoCronometro() {
       return state.currentView === 'viewCronometro' &&
         (state.timer.isRunning || state.timer.elapsedTime > 0 || state.pendingSyncs.size > 0);
