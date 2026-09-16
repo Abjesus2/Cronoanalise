@@ -5518,7 +5518,24 @@
       atualizarIndicadorUltimaAtualizacao();
     }
 
+    // A atualização manual recarrega os dados da planilha por cima do estado atual. Se o
+    // cronômetro tiver uma medição em andamento (rodando, parada mas não salva, ou ainda
+    // sincronizando), a atividade selecionada pode ser substituída ou removida durante a
+    // aplicação dos novos dados — o que reinicia o cronômetro e perde a medição. Por isso,
+    // nesse cenário específico, confirmamos com a pessoa antes de prosseguir.
+    function haMedicaoNaoSalvaNoCronometro() {
+      return state.currentView === 'viewCronometro' &&
+        (state.timer.isRunning || state.timer.elapsedTime > 0 || state.pendingSyncs.size > 0);
+    }
+
     async function atualizarDadosManual() {
+      if (haMedicaoNaoSalvaNoCronometro()) {
+        const confirmar = await customConfirm(
+          'Existe uma medição no cronômetro que ainda não foi salva. Atualizar os dados agora pode fazer você perdê-la. Deseja continuar mesmo assim?',
+          'Atualizar dados agora?'
+        );
+        if (!confirmar) return false;
+      }
       return executarAtualizacaoCompleta({ origem: 'manual', notificar: true });
     }
 
