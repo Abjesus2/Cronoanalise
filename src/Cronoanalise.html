@@ -10655,6 +10655,54 @@
       return areas;
     }
 
+    // Explica, em linguagem simples, o que cada parte do relatório representa. O documento é
+    // usado tanto como relatório para pessoas quanto como entrada para ferramentas de IA que
+    // geram fluxogramas do processo — por isso a distinção entre "estrutura/ordem do processo"
+    // e "amostras de medição" precisa ficar explícita em texto, não só implícita na formatação.
+    function criarLegendaDocumentoDocx(docxApi) {
+      return [
+        criarParagrafoDocx(docxApi, 'Como ler este documento', { negrito: true, tamanho: 22, cor: '1D4ED8', espacoDepois: 60 }),
+        criarParagrafoDocx(
+          docxApi,
+          'Parte 1 — Estrutura e sequência do processo: lista Áreas, Setores e Atividades na ORDEM REAL de execução. O código de cada atividade (ex.: 1.2.3) indica Área 1, Setor 2, 3ª atividade daquele setor, nessa ordem — ou seja, a atividade 1.2.3 é executada antes da 1.2.4. Use esta parte para reconstruir o fluxo do processo.',
+          { tamanho: 18, cor: '334155', recuo: 180, espacoDepois: 60 }
+        ),
+        criarParagrafoDocx(
+          docxApi,
+          'Parte 2 — Amostras de tempo cronometradas: para cada atividade listada na Parte 1, mostra as medições individuais já registradas (histórico de execuções reais, usado para estatística). Cada "contagem" é uma repetição cronometrada da MESMA atividade — não é uma etapa adicional do processo.',
+          { tamanho: 18, cor: '334155', recuo: 180, espacoDepois: 140 }
+        )
+      ];
+    }
+
+    // Lista compacta e linear da ordem de execução (Setor: passo 1 → passo 2 → ...), pensada
+    // para ser lida de uma vez só — inclusive por uma IA extraindo a sequência de um fluxograma,
+    // sem precisar interpretar a formatação/hierarquia do restante do documento.
+    function criarSequenciaProcessoDocx(docxApi, analises) {
+      const grupos = agruparAnalisesEstruturaDocx(analises);
+      if (!grupos.length) return [];
+      const elementos = [
+        criarParagrafoDocx(docxApi, 'Sequência do processo (ordem de execução)', { negrito: true, tamanho: 22, cor: '1D4ED8', espacoDepois: 60 })
+      ];
+      grupos.forEach((grupoArea, indiceArea) => {
+        const numeroArea = numeroEstruturaDocx(grupoArea.sequencia, indiceArea + 1);
+        grupoArea.setores.forEach((grupoSetor, indiceSetor) => {
+          const numeroSetor = numeroEstruturaDocx(grupoSetor.sequencia, indiceSetor + 1);
+          const passos = grupoSetor.atividades.map((analise, indiceAtividade) => {
+            const codigo = obterCodigoEstruturaDocx(analise, { area: indiceArea, setor: indiceSetor, atividade: indiceAtividade });
+            return `${codigo} ${textoDocx(analise.Atividade, 'Atividade sem nome')}`;
+          });
+          elementos.push(criarParagrafoDocx(
+            docxApi,
+            `Setor ${numeroArea}.${numeroSetor} — ${grupoArea.nome} › ${grupoSetor.nome}: ${passos.join('  →  ')}`,
+            { tamanho: 18, recuo: 180, espacoDepois: 50 }
+          ));
+        });
+      });
+      elementos.push(criarParagrafoDocx(docxApi, ' ', { espacoDepois: 60, tamanho: 8 }));
+      return elementos;
+    }
+
     function criarMapaCodigosEstruturaDocx(analises) {
       const mapa = new Map();
       agruparAnalisesEstruturaDocx(analises).forEach((grupoArea, indiceArea) => {
@@ -10749,7 +10797,7 @@
       const inclui = opcoes && (opcoes.descricao || opcoes.criterios || opcoes.consideracoes)
         ? { descricao: !!opcoes.descricao, criterios: !!opcoes.criterios, consideracoes: !!opcoes.consideracoes }
         : { descricao: true, criterios: true, consideracoes: true };
-      const elementos = [criarTituloSecaoDocx(docxApi, '1. Estrutura das áreas, setores e atividades', 1)];
+      const elementos = [criarTituloSecaoDocx(docxApi, '1. Estrutura e sequência do processo (Área → Setor → Atividade)', 1)];
       const totaisPorAnalise = new Map();
       contagens.forEach(contagem => {
         const chave = String(contagem.ID_Analise || '');
@@ -10763,17 +10811,23 @@
           elementos.push(criarParagrafoDocx(docxApi, `Setor ${numeroArea}.${numeroSetor} — ${grupoSetor.nome}`, { negrito: true, cor: '1E40AF', tamanho: 22, recuo: 180 }));
           grupoSetor.atividades.forEach((analise, indiceAtividade) => {
             const codigo = obterCodigoEstruturaDocx(analise, { area: indiceArea, setor: indiceSetor, atividade: indiceAtividade });
+            const indiceCampoRitmo = parseInt(analise.Campo_Ritmo, 10) || null;
             const parametros = [];
             for (let i = 1; i <= 8; i++) {
               const nome = String(analise[`Campo_${i}_Nome`] || '').trim();
               if (!nome) continue;
               const tipo = String(analise[`Campo_${i}_Tipo`] || '').trim();
-              parametros.push(tipo ? `${nome} (${tipo})` : nome);
+              const rotulo = tipo ? `${nome} (${tipo})` : nome;
+              parametros.push(i === indiceCampoRitmo ? `${rotulo} [campo base do ritmo]` : rotulo);
             }
+            const paradasAplicaveis = String(analise.Paradas_Aplicaveis || '')
+              .split(',').map(nomeParada => nomeParada.trim()).filter(Boolean);
             elementos.push(criarParagrafoDocx(docxApi, `Atividade ${codigo} — ${textoDocx(analise.Atividade, 'Atividade sem nome')}`, { negrito: true, recuo: 360, espacoDepois: 40 }));
+            elementos.push(criarParagrafoDocx(docxApi, `Etapa ${indiceAtividade + 1} de ${grupoSetor.atividades.length} deste setor`, { recuo: 540, tamanho: 18, cor: '64748B', italico: true, espacoDepois: 30 }));
             if (inclui.descricao) elementos.push(criarParagrafoDocx(docxApi, `Descrição: ${textoDocx(analise.Descricao_Atividade)}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
             if (inclui.criterios && String(analise.Criterios_Medicao || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Critérios de medição: ${analise.Criterios_Medicao}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
             if (inclui.consideracoes && String(analise.Consideracoes_Atividade || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Considerações: ${analise.Consideracoes_Atividade}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
+            if (paradasAplicaveis.length) elementos.push(criarParagrafoDocx(docxApi, `Paradas aplicáveis: ${paradasAplicaveis.join(', ')}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
             if (parametros.length) elementos.push(criarParagrafoDocx(docxApi, `Parâmetros registrados: ${parametros.join('; ')}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
             const total = totaisPorAnalise.get(String(analise.ID_Analise || '')) || 0;
             elementos.push(criarParagrafoDocx(docxApi, `Medições incluídas: ${total}`, { recuo: 540, tamanho: 18, negrito: true, cor: '475569', espacoDepois: 100 }));
@@ -10798,7 +10852,7 @@
       const inclui = opcoes && (opcoes.descricao || opcoes.criterios || opcoes.consideracoes)
         ? { descricao: !!opcoes.descricao, criterios: !!opcoes.criterios, consideracoes: !!opcoes.consideracoes }
         : { descricao: true, criterios: true, consideracoes: true };
-      const elementos = [criarTituloSecaoDocx(docxApi, '2. Medições separadas por atividade', 1, { novaPagina: true })];
+      const elementos = [criarTituloSecaoDocx(docxApi, '2. Amostras de tempo cronometradas (histórico de medições por atividade)', 1, { novaPagina: true })];
       const cabecalhoTempoTotal = obterCabecalhoTempoExportacao('Tempo cronometrado');
       const cabecalhoTempoUnidade = obterCabecalhoTempoExportacao('Tempo por unidade');
       const codigosEstrutura = criarMapaCodigosEstruturaDocx(analises);
@@ -10828,7 +10882,8 @@
           [obterCabecalhoTempoExportacao('Maior tempo'), formatarTempoExportacao(estatisticas.max, true)],
           ['Coeficiente de variação (%)', `${estatisticas.cv}%`]
         ]));
-        elementos.push(criarParagrafoDocx(docxApi, 'Detalhamento das contagens', { negrito: true, tamanho: 23, cor: '1D4ED8', espacoDepois: 80 }));
+        elementos.push(criarParagrafoDocx(docxApi, 'Detalhamento das contagens (amostras individuais desta etapa)', { negrito: true, tamanho: 23, cor: '1D4ED8', espacoDepois: 40 }));
+        elementos.push(criarParagrafoDocx(docxApi, 'Cada registro abaixo é uma repetição cronometrada da mesma atividade — não representa uma etapa adicional do processo.', { tamanho: 17, cor: '64748B', italico: true, espacoDepois: 80 }));
 
         const todasContagensDaAnalise = contagensPorAnaliseCompleta.get(valorComparavel(analise.ID_Analise)) || [];
         contagensAtividade.forEach((contagem, indiceContagem) => {
@@ -10928,7 +10983,8 @@
             ['Formato dos tempos', formatoTempo],
             ['Conteúdo', `${areas} área(s) · ${setores} setor(es) · ${contexto.analises.length} atividade(s) · ${contexto.contagens.length} contagem(ns)`]
           ]),
-          criarParagrafoDocx(docxApi, 'Este documento apresenta primeiro a organização das áreas, setores e atividades. Na segunda parte, cada medição aparece dentro de sua atividade e recebe uma numeração própria para facilitar a identificação da contagem.', { italico: true, cor: '475569', espacoDepois: 160 }),
+          ...criarLegendaDocumentoDocx(docxApi),
+          ...criarSequenciaProcessoDocx(docxApi, contexto.analises),
           ...criarEstruturaInicialDocx(docxApi, contexto.analises, contexto.contagens, opcoesInclusao),
           ...criarMedicoesPorAtividadeDocx(docxApi, contexto.analises, contexto.contagens, opcoesInclusao)
         ];
@@ -10987,12 +11043,13 @@
     function criarTabelaResumoEstatisticoDocx(docxApi, linhasResumo) {
       const { Table, TableRow, WidthType, TableLayoutType, BorderStyle } = docxApi;
       const cabecalhos = [
-        ['Área', 14],
-        ['Setor', 14],
-        ['Atividade', 20],
-        ['Ciclos', 8],
-        [obterCabecalhoTempoExportacao('Tempo médio'), 12],
-        ['Média de peças', 10],
+        ['Etapa', 9],
+        ['Área', 13],
+        ['Setor', 13],
+        ['Atividade', 16],
+        ['Ciclos', 7],
+        [obterCabecalhoTempoExportacao('Tempo médio'), 11],
+        ['Média de peças', 9],
         ['Capacidade (peças/h)', 12],
         ['CV (%)', 10]
       ];
@@ -11014,6 +11071,7 @@
           : formatarQuantidadeMedia(linha.quantidadeMedia);
         const corFundo = indice % 2 === 0 ? 'F8FAFC' : 'E2E8F0';
         const valores = [
+          obterCodigoEstruturaDocx(linha.analise),
           linha.analise.Area || '',
           linha.analise.Setor || '',
           linha.analise.Atividade || '',
@@ -11158,7 +11216,7 @@
                 ['Formato dos tempos', formatoTempo],
                 ['Conteúdo', `${totalAreas} área(s) · ${totalSetores} setor(es) · ${linhasResumo.length} atividade(s) · ${totalCiclos} ciclo(s)`]
               ]),
-              criarParagrafoDocx(docxApi, 'Os valores abaixo correspondem exatamente aos filtros ativos e à precisão de tempo escolhida para exportação.', { italico: true, cor: '475569', espacoDepois: 140 }),
+              criarParagrafoDocx(docxApi, 'Os valores abaixo correspondem exatamente aos filtros ativos e à precisão de tempo escolhida para exportação. As linhas seguem a ordem real de execução do processo, e a coluna "Etapa" traz o código Área.Setor.Atividade dessa sequência (ex.: 1.2.3 é a 3ª atividade do Setor 2 da Área 1).', { italico: true, cor: '475569', espacoDepois: 140 }),
               criarTabelaResumoEstatisticoDocx(docxApi, linhasResumo),
               ...criarApendiceAtividadesResumoDocx(docxApi, linhasResumo.map(linha => linha.analise), opcoesInclusao)
             ]
