@@ -10466,8 +10466,8 @@
             'Setor': analise.Setor || '',
             'Atividade': analise.Atividade || ''
           };
-          if (inclui.descricao) linha['Descrição de atividade'] = analise.Descricao_Atividade || '';
-          if (inclui.criterios) linha['Critérios de medição'] = analise.Criterios_Medicao || '';
+          if (inclui.descricao) linha['O que é feito nesta atividade'] = analise.Descricao_Atividade || '';
+          if (inclui.criterios) linha['Critério de início/fim da cronometragem'] = analise.Criterios_Medicao || '';
           if (inclui.consideracoes) linha['Considerações'] = analise.Consideracoes_Atividade || '';
           return linha;
         });
@@ -10670,6 +10670,11 @@
         criarParagrafoDocx(
           docxApi,
           'Parte 2 — Amostras de tempo cronometradas: para cada atividade listada na Parte 1, mostra as medições individuais já registradas (histórico de execuções reais, usado para estatística). Cada "contagem" é uma repetição cronometrada da MESMA atividade — não é uma etapa adicional do processo.',
+          { tamanho: 18, cor: '334155', recuo: 180, espacoDepois: 60 }
+        ),
+        criarParagrafoDocx(
+          docxApi,
+          'Dois campos de cada atividade merecem atenção: "O que é feito nesta atividade" descreve o trabalho realizado nesse passo do processo (use para entender o conteúdo de cada etapa). Já "Critério de início/fim da cronometragem" não é uma etapa do processo — é a regra usada para decidir quando o cronômetro começa e para de contar durante a medição (metodologia da medição, não parte do fluxo).',
           { tamanho: 18, cor: '334155', recuo: 180, espacoDepois: 140 }
         )
       ];
@@ -10824,8 +10829,8 @@
               .split(',').map(nomeParada => nomeParada.trim()).filter(Boolean);
             elementos.push(criarParagrafoDocx(docxApi, `Atividade ${codigo} — ${textoDocx(analise.Atividade, 'Atividade sem nome')}`, { negrito: true, recuo: 360, espacoDepois: 40 }));
             elementos.push(criarParagrafoDocx(docxApi, `Etapa ${indiceAtividade + 1} de ${grupoSetor.atividades.length} deste setor`, { recuo: 540, tamanho: 18, cor: '64748B', italico: true, espacoDepois: 30 }));
-            if (inclui.descricao) elementos.push(criarParagrafoDocx(docxApi, `Descrição: ${textoDocx(analise.Descricao_Atividade)}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
-            if (inclui.criterios && String(analise.Criterios_Medicao || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Critérios de medição: ${analise.Criterios_Medicao}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
+            if (inclui.descricao) elementos.push(criarParagrafoDocx(docxApi, `O que é feito nesta atividade: ${textoDocx(analise.Descricao_Atividade)}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
+            if (inclui.criterios && String(analise.Criterios_Medicao || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Critério de início/fim da cronometragem: ${analise.Criterios_Medicao}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
             if (inclui.consideracoes && String(analise.Consideracoes_Atividade || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Considerações: ${analise.Consideracoes_Atividade}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
             if (paradasAplicaveis.length) elementos.push(criarParagrafoDocx(docxApi, `Paradas aplicáveis: ${paradasAplicaveis.join(', ')}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
             if (parametros.length) elementos.push(criarParagrafoDocx(docxApi, `Parâmetros registrados: ${parametros.join('; ')}`, { recuo: 540, tamanho: 18, espacoDepois: 30 }));
@@ -10867,8 +10872,8 @@
         const codigo = codigosEstrutura.get(String(analise.ID_Analise || '')) || obterCodigoEstruturaDocx(analise);
         elementos.push(criarTituloSecaoDocx(docxApi, `${codigo} — ${textoDocx(analise.Atividade, 'Atividade sem nome')}`, 2, { novaPagina: indiceAnalise > 0 }));
         elementos.push(criarParagrafoDocx(docxApi, `${textoDocx(analise.Area, 'Área não informada')} › ${textoDocx(analise.Setor, 'Setor não informado')}`, { negrito: true, cor: '475569' }));
-        if (inclui.descricao && String(analise.Descricao_Atividade || '').trim()) elementos.push(criarParagrafoDocx(docxApi, analise.Descricao_Atividade, { italico: true, cor: '475569' }));
-        if (inclui.criterios && String(analise.Criterios_Medicao || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Critérios de medição: ${analise.Criterios_Medicao}`, { tamanho: 18, cor: '475569' }));
+        if (inclui.descricao && String(analise.Descricao_Atividade || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `O que é feito nesta atividade: ${analise.Descricao_Atividade}`, { italico: true, cor: '475569' }));
+        if (inclui.criterios && String(analise.Criterios_Medicao || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Critério de início/fim da cronometragem: ${analise.Criterios_Medicao}`, { tamanho: 18, cor: '475569' }));
         if (inclui.consideracoes && String(analise.Consideracoes_Atividade || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Considerações: ${analise.Consideracoes_Atividade}`, { tamanho: 18, cor: '475569' }));
 
         const tempos = contagensAtividade.map(contagem => parseTimeToSecondsPrecise(contagem.Tempo_Total));
@@ -11115,8 +11120,8 @@
       atividadesUnicas.forEach(analise => {
         elementos.push(criarParagrafoDocx(docxApi, `${textoDocx(analise.Atividade, 'Atividade sem nome')}`, { negrito: true, espacoDepois: 30 }));
         elementos.push(criarParagrafoDocx(docxApi, `${textoDocx(analise.Area, 'Área não informada')} › ${textoDocx(analise.Setor, 'Setor não informado')}`, { cor: '475569', tamanho: 18, espacoDepois: 60 }));
-        if (opcoes.descricao) elementos.push(criarParagrafoDocx(docxApi, `Descrição: ${textoDocx(analise.Descricao_Atividade)}`, { recuo: 180, tamanho: 18, espacoDepois: 30 }));
-        if (opcoes.criterios && String(analise.Criterios_Medicao || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Critérios de medição: ${analise.Criterios_Medicao}`, { recuo: 180, tamanho: 18, espacoDepois: 30 }));
+        if (opcoes.descricao) elementos.push(criarParagrafoDocx(docxApi, `O que é feito nesta atividade: ${textoDocx(analise.Descricao_Atividade)}`, { recuo: 180, tamanho: 18, espacoDepois: 30 }));
+        if (opcoes.criterios && String(analise.Criterios_Medicao || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Critério de início/fim da cronometragem: ${analise.Criterios_Medicao}`, { recuo: 180, tamanho: 18, espacoDepois: 30 }));
         if (opcoes.consideracoes && String(analise.Consideracoes_Atividade || '').trim()) elementos.push(criarParagrafoDocx(docxApi, `Considerações: ${analise.Consideracoes_Atividade}`, { recuo: 180, tamanho: 18, espacoDepois: 120 }));
       });
       return elementos;
