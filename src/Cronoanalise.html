@@ -1945,6 +1945,7 @@
                 <div class="navbar-options-section-label">Formato da visualização</div>
                 <button class="time-display-option" type="button" data-time-display-format="clock" onclick="alterarFormatoVisualizacaoTempo('clock')"><i class="fa-solid fa-check time-option-check" aria-hidden="true"></i><span>Formato de tempo (HH:MM:SS)</span></button>
                 <button class="time-display-option" type="button" data-time-display-format="decimal" onclick="alterarFormatoVisualizacaoTempo('decimal')"><i class="fa-solid fa-check time-option-check" aria-hidden="true"></i><span>Decimal (segundos)</span></button>
+                <button class="time-display-option" type="button" data-time-display-format="minutes" onclick="alterarFormatoVisualizacaoTempo('minutes')"><i class="fa-solid fa-check time-option-check" aria-hidden="true"></i><span>Minutos</span></button>
               </div>
 
               <div class="navbar-options-section">
@@ -10395,9 +10396,12 @@
     }
 
     function obterCabecalhoTempoExportacao(rotulo) {
-      const unidade = obterFormatoTempoValido(state.exportTimeFormat) === 'decimal'
+      const formatoValido = obterFormatoTempoValido(state.exportTimeFormat);
+      const unidade = formatoValido === 'decimal'
         ? 's'
-        : obterConfiguracaoTempo(state.exportTimeMode).pattern;
+        : formatoValido === 'minutes'
+          ? 'min'
+          : obterConfiguracaoTempo(state.exportTimeMode).pattern;
       return `${rotulo} (${unidade})`;
     }
 
@@ -13635,11 +13639,14 @@
     }
 
     function obterFormatoTempoValido(formato, fallback = 'clock') {
-      return formato === 'decimal' || formato === 'clock' ? formato : fallback;
+      return formato === 'decimal' || formato === 'clock' || formato === 'minutes' ? formato : fallback;
     }
 
     function obterRotuloFormatoTempo(formato = state.timeDisplayFormat) {
-      return obterFormatoTempoValido(formato) === 'decimal' ? 'Decimal (segundos)' : 'Formato de tempo';
+      const formatoValido = obterFormatoTempoValido(formato);
+      if (formatoValido === 'decimal') return 'Decimal (segundos)';
+      if (formatoValido === 'minutes') return 'Minutos';
+      return 'Formato de tempo';
     }
 
     function parseTimeToSeconds(tStr) {
@@ -13673,10 +13680,25 @@
       return incluirUnidade ? `${texto} s` : texto;
     }
 
+    // Mesma lógica de formatarSegundosComoDecimal, convertendo para minutos antes de aplicar
+    // as casas decimais da precisão escolhida (ex.: 85,2s ÷ 60 = 1,42 min na precisão "Centésimo").
+    function formatarSegundosComoMinutos(segundos, modo = state.timeDisplayMode, incluirUnidade = true) {
+      if (segundos == null || !Number.isFinite(Number(segundos)) || Number(segundos) < 0) return '—';
+      const casas = obterConfiguracaoTempo(modo).decimals;
+      const minutos = Number(segundos) / 60;
+      const texto = minutos.toLocaleString('pt-BR', {
+        useGrouping: false,
+        minimumFractionDigits: casas,
+        maximumFractionDigits: casas
+      });
+      return incluirUnidade ? `${texto} min` : texto;
+    }
+
     function formatarSegundosComPrecisao(segundos, modo = state.timeDisplayMode, formato = state.timeDisplayFormat, incluirUnidade = true) {
-      return obterFormatoTempoValido(formato) === 'decimal'
-        ? formatarSegundosComoDecimal(segundos, modo, incluirUnidade)
-        : formatarSegundosComoRelogio(segundos, modo);
+      const formatoValido = obterFormatoTempoValido(formato);
+      if (formatoValido === 'decimal') return formatarSegundosComoDecimal(segundos, modo, incluirUnidade);
+      if (formatoValido === 'minutes') return formatarSegundosComoMinutos(segundos, modo, incluirUnidade);
+      return formatarSegundosComoRelogio(segundos, modo);
     }
 
     function formatarTempoArmazenado(valor, modo = state.timeDisplayMode, formato = state.timeDisplayFormat) {
@@ -13730,7 +13752,8 @@
 
     function sincronizarSeletoresTempo() {
       const config = obterConfiguracaoTempo(state.timeDisplayMode);
-      const rotuloFormato = state.timeDisplayFormat === 'decimal' ? 'Decimal' : 'Tempo';
+      const rotulosFormatoCurto = { decimal: 'Decimal', minutes: 'Minutos' };
+      const rotuloFormato = rotulosFormatoCurto[state.timeDisplayFormat] || 'Tempo';
       const rotuloFormatoCompleto = obterRotuloFormatoTempo(state.timeDisplayFormat);
       const labelFormato = document.getElementById('timeDisplayFormatLabel');
       if (labelFormato) labelFormato.textContent = rotuloFormato;
