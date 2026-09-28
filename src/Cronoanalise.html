@@ -13738,11 +13738,16 @@
       return formatarSegundosComPrecisao(segundosDecorridos, state.timeDisplayMode, state.timeDisplayFormat);
     }
 
+    // Sempre grava na precisão máxima real do cronômetro (milissegundo, resolução de Date.now()),
+    // independente da precisão selecionada em "Precisão da visualização" no momento do salvamento.
+    // Isso evita que uma medição fique presa para sempre numa precisão mais baixa (ex.: "Segundo")
+    // só porque era a tela ativa quando "Salvar e Próximo" foi clicado — toda visualização passa
+    // a poder converter a partir do valor mais exato que o cronômetro conseguiu medir.
     function formatTimeForStorage(ms) {
-      const casas = obterConfiguracaoTempo(state.timeDisplayMode).decimals;
+      const casas = TIME_MODE_CONFIG.millisecond.decimals;
       const fator = 10 ** casas;
       const segundosDecorridos = Math.floor((Math.max(0, Number(ms) || 0) / 1000) * fator) / fator;
-      return formatarSegundosComoRelogio(segundosDecorridos, state.timeDisplayMode);
+      return formatarSegundosComoRelogio(segundosDecorridos, 'millisecond');
     }
 
     function arredondarTempoParaModo(segundos, modo = state.timeDisplayMode) {
