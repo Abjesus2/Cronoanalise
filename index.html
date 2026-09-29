@@ -11210,34 +11210,84 @@
           ['Coeficiente de variação (%)', `${estatisticas.cv}%`]
         ]));
         elementos.push(criarParagrafoDocx(docxApi, 'Detalhamento das contagens (amostras individuais desta etapa)', { negrito: true, tamanho: 23, cor: '1D4ED8', espacoDepois: 40 }));
-        elementos.push(criarParagrafoDocx(docxApi, 'Cada registro abaixo é uma repetição cronometrada da mesma atividade — não representa uma etapa adicional do processo.', { tamanho: 17, cor: '64748B', italico: true, espacoDepois: 80 }));
+        elementos.push(criarParagrafoDocx(docxApi, 'Cada linha da tabela abaixo é uma repetição cronometrada da mesma atividade — não representa uma etapa adicional do processo.', { tamanho: 17, cor: '64748B', italico: true, espacoDepois: 80 }));
 
         const todasContagensDaAnalise = contagensPorAnaliseCompleta.get(valorComparavel(analise.ID_Analise)) || [];
-        contagensAtividade.forEach((contagem, indiceContagem) => {
-          const observacao = decodeObs(contagem.Observacoes);
-          const tempoUnidade = calcularTempoPorUnidade(contagem, analise);
-          const ritmo = calcularRitmoEUnitario(contagem, analise, todasContagensDaAnalise);
-          const titulo = `Contagem ${indiceContagem + 1} de ${contagensAtividade.length} — ${textoDocx(contagem.Data_Hora)}`;
-          elementos.push(criarTituloSecaoDocx(docxApi, titulo, 3));
-          const linhas = [];
-          if (String(contagem.ID_Contagem || '').trim()) linhas.push(['Identificador da contagem', contagem.ID_Contagem]);
-          linhas.push(['Data e hora', textoDocx(contagem.Data_Hora)]);
-          linhas.push([cabecalhoTempoTotal, formatarTempoExportacao(contagem.Tempo_Total)]);
-          linhas.push([cabecalhoTempoUnidade, formatarTempoExportacao(tempoUnidade.segundos, true)]);
-          linhas.push(['Ritmo calculado (%)', `${ritmo.ritmo}%`]);
-          for (let i = 1; i <= 8; i++) {
-            const nome = String(analise[`Campo_${i}_Nome`] || '').trim();
-            if (!nome) continue;
-            const tipo = String(analise[`Campo_${i}_Tipo`] || '').trim();
-            linhas.push([tipo ? `${nome} (${tipo})` : nome, textoDocx(contagem[`Campo_${i}_Valor`])]);
-          }
-          linhas.push(['Anomalia', textoDocx(observacao.classif, 'Operação Normal')]);
-          linhas.push(['Observações', textoDocx(observacao.obs, 'Nenhuma observação')]);
-          elementos.push(criarTabelaChaveValorDocx(docxApi, linhas));
-          elementos.push(criarParagrafoDocx(docxApi, ' ', { espacoDepois: 80, tamanho: 8 }));
-        });
+        elementos.push(criarTabelaMedicoesDocx(
+          docxApi, analise, contagensAtividade, todasContagensDaAnalise, cabecalhoTempoTotal, cabecalhoTempoUnidade
+        ));
+        elementos.push(criarParagrafoDocx(docxApi, ' ', { espacoDepois: 100, tamanho: 8 }));
       });
       return elementos;
+    }
+
+    // Tabela compacta com uma linha por contagem (em vez de um bloco chave-valor por
+    // contagem), para caber muito mais medições por página sem perder nenhuma informação.
+    function criarTabelaMedicoesDocx(docxApi, analise, contagensAtividade, todasContagensDaAnalise, cabecalhoTempoTotal, cabecalhoTempoUnidade) {
+      const { Table, TableRow, WidthType, TableLayoutType, BorderStyle } = docxApi;
+      const parametros = [];
+      for (let i = 1; i <= 8; i++) {
+        const nome = String(analise[`Campo_${i}_Nome`] || '').trim();
+        if (!nome) continue;
+        const tipo = String(analise[`Campo_${i}_Tipo`] || '').trim();
+        parametros.push({ indice: i, rotulo: tipo ? `${nome} (${tipo})` : nome });
+      }
+      const colunas = [
+        { rotulo: '#', peso: 3 },
+        { rotulo: 'Data/Hora', peso: 12 },
+        { rotulo: cabecalhoTempoTotal, peso: 10 },
+        { rotulo: cabecalhoTempoUnidade, peso: 10 },
+        { rotulo: 'Ritmo (%)', peso: 7 },
+        ...parametros.map(p => ({ rotulo: p.rotulo, peso: 9 })),
+        { rotulo: 'Anomalia', peso: 9 },
+        { rotulo: 'Observações', peso: 16 }
+      ];
+      const somaPesos = colunas.reduce((soma, coluna) => soma + coluna.peso, 0);
+      const larguras = colunas.map(coluna => Math.round((coluna.peso / somaPesos) * 1000) / 10);
+
+      const linhas = [new TableRow({
+        tableHeader: true,
+        cantSplit: true,
+        children: colunas.map((coluna, indice) => criarCelulaDocx(docxApi, coluna.rotulo, {
+          largura: larguras[indice],
+          negrito: true,
+          corFundo: '1E3A8A',
+          corTexto: 'FFFFFF',
+          tamanho: 16
+        }))
+      })];
+
+      contagensAtividade.forEach((contagem, indiceContagem) => {
+        const observacao = decodeObs(contagem.Observacoes);
+        const tempoUnidade = calcularTempoPorUnidade(contagem, analise);
+        const ritmo = calcularRitmoEUnitario(contagem, analise, todasContagensDaAnalise);
+        const valores = [
+          String(indiceContagem + 1),
+          textoDocx(contagem.Data_Hora),
+          formatarTempoExportacao(contagem.Tempo_Total),
+          formatarTempoExportacao(tempoUnidade.segundos, true),
+          `${ritmo.ritmo}%`,
+          ...parametros.map(p => textoDocx(contagem[`Campo_${p.indice}_Valor`])),
+          textoDocx(observacao.classif, 'Operação Normal'),
+          textoDocx(observacao.obs, '—')
+        ];
+        const corFundo = indiceContagem % 2 === 0 ? 'F8FAFC' : 'E2E8F0';
+        linhas.push(new TableRow({
+          cantSplit: true,
+          children: valores.map((valor, indice) => criarCelulaDocx(docxApi, valor, {
+            largura: larguras[indice],
+            corFundo,
+            tamanho: 16
+          }))
+        }));
+      });
+
+      return new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        layout: TableLayoutType.FIXED,
+        borders: bordasTabelaDocx(BorderStyle),
+        rows: linhas
+      });
     }
 
     function nomeArquivoDashboardDocx() {
