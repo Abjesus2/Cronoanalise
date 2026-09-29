@@ -2351,6 +2351,7 @@
             </ul>
           </div>
           <button class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="btnModoExcluir" onclick="toggleModoExclusao()"><i class="fa-solid fa-trash-can"></i> Excluir</button>
+          <button class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1 d-none" id="btnMoverAtividades" onclick="abrirMoverAtividadesEmLote()"><i class="fa-solid fa-arrows-up-down-left-right"></i> Mover</button>
           <button class="btn btn-danger btn-sm d-flex align-items-center gap-1 d-none" id="btnConfirmarExclusao" onclick="confirmarExclusaoEmLote()"><i class="fa-solid fa-check"></i> Confirmar</button>
           <button class="btn btn-secondary btn-sm d-flex align-items-center gap-1 d-none" id="btnCancelarExclusao" onclick="toggleModoExclusao()"><i class="fa-solid fa-xmark"></i> Cancelar</button>
         </div>
@@ -2486,6 +2487,7 @@
             <button class="btn btn-primary btn-sm d-flex align-items-center gap-1 btn-action-mobile" onclick="iniciarNovaCrono()"><i class="fa-solid fa-play"></i> Cronômetro</button>
             <button class="btn btn-success btn-sm d-flex align-items-center gap-1 btn-action-mobile" onclick="abrirModalAdicionarManual()"><i class="fa-solid fa-plus"></i> Adicionar Manual</button>
             <button class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1 btn-action-mobile" id="btnModoExcluirContagens" onclick="toggleModoExclusaoContagens()"><i class="fa-solid fa-trash-can"></i> Excluir</button>
+            <button class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1 d-none btn-action-mobile" id="btnMoverContagens" onclick="abrirMoverContagensEmLote()"><i class="fa-solid fa-arrows-up-down-left-right"></i> Mover</button>
             <button class="btn btn-danger btn-sm d-flex align-items-center gap-1 d-none btn-action-mobile" id="btnConfirmarExclusaoContagens" onclick="confirmarExclusaoContagensEmLote()"><i class="fa-solid fa-check"></i> Confirmar</button>
             <button class="btn btn-secondary btn-sm d-flex align-items-center gap-1 d-none btn-action-mobile" id="btnCancelarExclusaoContagens" onclick="toggleModoExclusaoContagens()"><i class="fa-solid fa-xmark"></i> Cancelar</button>
           </div>
@@ -7872,6 +7874,108 @@
       });
     }
 
+    // Modal para escolher a Área/Setor de destino ao mover uma ou mais atividades em lote.
+    function pedirDestinoAreaSetor(titulo) {
+      return new Promise((resolve) => {
+        const areasOrdenadas = [...state.areasCadastradas].sort((a, b) =>
+          (normalizarSequencia(a.Sequencia) ?? 9999) - (normalizarSequencia(b.Sequencia) ?? 9999) ||
+          sortTextCollator.compare(a.Nome || '', b.Nome || '')
+        );
+        const backdrop = document.createElement('div');
+        backdrop.className = 'custom-modal-backdrop';
+        backdrop.innerHTML = `
+          <div class="custom-modal-box" style="max-width:420px;">
+            <div class="custom-modal-header alert-type"><span><i class="fa-solid fa-arrows-up-down-left-right me-2"></i>${titulo}</span></div>
+            <div class="custom-modal-body">
+              <div class="mb-3">
+                <label class="form-label fw-bold" for="moverDestinoArea">Área de destino</label>
+                <select class="form-select" id="moverDestinoArea">
+                  ${areasOrdenadas.map(a => `<option value="${a.ID_Area}">${escapeHTML(a.Nome)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label fw-bold" for="moverDestinoSetor">Setor de destino</label>
+                <select class="form-select" id="moverDestinoSetor"></select>
+              </div>
+            </div>
+            <div class="custom-modal-footer">
+              <button type="button" class="btn btn-secondary" id="moverDestinoCancel">Cancelar</button>
+              <button type="button" class="btn btn-primary" id="moverDestinoOk"><i class="fa-solid fa-check me-1"></i> Mover</button>
+            </div>
+          </div>`;
+        document.body.appendChild(backdrop);
+        const selectArea = backdrop.querySelector('#moverDestinoArea');
+        const selectSetor = backdrop.querySelector('#moverDestinoSetor');
+        const popularSetores = () => {
+          const setoresDaArea = state.setoresCadastrados
+            .filter(s => valorComparavel(s.ID_Area) === valorComparavel(selectArea.value))
+            .sort((a, b) =>
+              (normalizarSequencia(a.Sequencia) ?? 9999) - (normalizarSequencia(b.Sequencia) ?? 9999) ||
+              sortTextCollator.compare(a.Nome || '', b.Nome || '')
+            );
+          selectSetor.innerHTML = setoresDaArea.map(s => `<option value="${s.ID_Setor}">${escapeHTML(s.Nome)}</option>`).join('');
+        };
+        selectArea.addEventListener('change', popularSetores);
+        popularSetores();
+        const fechar = (valor) => { backdrop.remove(); resolve(valor); };
+        backdrop.querySelector('#moverDestinoOk').onclick = () => {
+          if (!selectArea.value || !selectSetor.value) return;
+          fechar({
+            idArea: selectArea.value,
+            area: state.areasCadastradas.find(a => valorComparavel(a.ID_Area) === valorComparavel(selectArea.value))?.Nome || '',
+            idSetor: selectSetor.value,
+            setor: state.setoresCadastrados.find(s => valorComparavel(s.ID_Setor) === valorComparavel(selectSetor.value))?.Nome || ''
+          });
+        };
+        backdrop.querySelector('#moverDestinoCancel').onclick = () => fechar(null);
+        anexarComportamentoModal_(backdrop, backdrop.querySelector('#moverDestinoCancel'), () => fechar(null));
+      });
+    }
+
+    // Duas atividades só podem trocar Contagens entre si se tiverem exatamente os mesmos
+    // campos personalizados (Campo_1..8, nome e tipo) — do contrário um valor gravado num
+    // campo perderia o sentido na atividade de destino.
+    function mesmaEstruturaCamposFrontend(a, b) {
+      for (let i = 1; i <= 8; i++) {
+        if ((a[`Campo_${i}_Nome`] || '') !== (b[`Campo_${i}_Nome`] || '')) return false;
+        if ((a[`Campo_${i}_Tipo`] || '') !== (b[`Campo_${i}_Tipo`] || '')) return false;
+      }
+      return true;
+    }
+
+    // Modal para escolher para qual atividade compatível mover uma ou mais contagens em lote.
+    function pedirDestinoAtividadeCompativel(analiseOrigem) {
+      const candidatas = state.analises
+        .filter(a => valorComparavel(a.ID_Analise) !== valorComparavel(analiseOrigem.ID_Analise))
+        .filter(a => mesmaEstruturaCamposFrontend(a, analiseOrigem))
+        .sort(compararAnalisesDocx);
+      if (!candidatas.length) return Promise.resolve('__NENHUMA__');
+      return new Promise((resolve) => {
+        const backdrop = document.createElement('div');
+        backdrop.className = 'custom-modal-backdrop';
+        backdrop.innerHTML = `
+          <div class="custom-modal-box" style="max-width:460px;">
+            <div class="custom-modal-header alert-type"><span><i class="fa-solid fa-arrows-up-down-left-right me-2"></i>Mover para qual atividade?</span></div>
+            <div class="custom-modal-body">
+              <p class="small text-muted mb-2">Só aparecem atividades com os mesmos campos personalizados de "${escapeHTML(analiseOrigem.Atividade)}".</p>
+              <select class="form-select" id="moverDestinoAtividade">
+                ${candidatas.map(a => `<option value="${a.ID_Analise}">${escapeHTML(a.Area)} › ${escapeHTML(a.Setor)} › ${escapeHTML(a.Atividade)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="custom-modal-footer">
+              <button type="button" class="btn btn-secondary" id="moverDestinoAtividadeCancel">Cancelar</button>
+              <button type="button" class="btn btn-primary" id="moverDestinoAtividadeOk"><i class="fa-solid fa-check me-1"></i> Mover</button>
+            </div>
+          </div>`;
+        document.body.appendChild(backdrop);
+        const select = backdrop.querySelector('#moverDestinoAtividade');
+        const fechar = (valor) => { backdrop.remove(); resolve(valor); };
+        backdrop.querySelector('#moverDestinoAtividadeOk').onclick = () => fechar(select.value || null);
+        backdrop.querySelector('#moverDestinoAtividadeCancel').onclick = () => fechar(null);
+        anexarComportamentoModal_(backdrop, backdrop.querySelector('#moverDestinoAtividadeCancel'), () => fechar(null));
+      });
+    }
+
     const EXPORT_OPCOES_STORAGE_KEY = 'crono_export_inclusao_v1';
     function lerOpcoesInclusaoSalvas() {
       try {
@@ -8309,6 +8413,7 @@
     function toggleModoExclusao() { state.modoExclusao = !state.modoExclusao; atualizarBotoesExclusao(); renderListaAtividades(); }
     function atualizarBotoesExclusao() {
       document.getElementById('btnModoExcluir').classList.toggle('d-none', state.modoExclusao);
+      document.getElementById('btnMoverAtividades').classList.toggle('d-none', !state.modoExclusao);
       document.getElementById('btnConfirmarExclusao').classList.toggle('d-none', !state.modoExclusao);
       document.getElementById('btnCancelarExclusao').classList.toggle('d-none', !state.modoExclusao);
     }
@@ -8327,6 +8432,34 @@
       await executarComSincronizacao({ action: 'deleteMultipleAnalises', ids: JSON.stringify(selecionados) }, selecionados.length > 1 ? "Atividades excluídas e validadas na planilha!" : "Atividade excluída e validada na planilha!", () => {
         renderListaAtividades();
       });
+    }
+
+    async function abrirMoverAtividadesEmLote() {
+      const selecionados = Array.from(document.querySelectorAll('.chk-excluir:checked')).map(c => c.value);
+      if (selecionados.length === 0) { await customAlert('Selecione ao menos uma atividade.', 'Atenção'); return; }
+      const destino = await pedirDestinoAreaSetor(
+        selecionados.length > 1 ? `Mover ${selecionados.length} atividades para...` : 'Mover atividade para...'
+      );
+      if (!destino) return;
+      const totalContagens = state.allContagens.filter(c => selecionados.includes(c.ID_Analise)).length;
+      const mensagemConfirmacao = `Mover ${selecionados.length} atividade${selecionados.length > 1 ? 's' : ''} para "${destino.area} › ${destino.setor}"${totalContagens ? `, levando ${totalContagens} medição${totalContagens > 1 ? 'ões' : ''} junto` : ''}?`;
+      if (!await customConfirm(mensagemConfirmacao, 'Mover Atividades')) return;
+
+      // Optimistic UI update
+      state.analises.forEach(a => {
+        if (selecionados.includes(a.ID_Analise)) {
+          a.Area = destino.area;
+          a.Setor = destino.setor;
+        }
+      });
+      normalizarTodasSequenciasNoEstado();
+      state.modoExclusao = false; atualizarBotoesExclusao(); renderListaAtividades();
+
+      await executarComSincronizacao(
+        { action: 'moveMultipleAnalises', ids: JSON.stringify(selecionados), idArea: destino.idArea, idSetor: destino.idSetor },
+        selecionados.length > 1 ? 'Atividades movidas e validadas na planilha!' : 'Atividade movida e validada na planilha!',
+        () => { renderListaAtividades(); }
+      );
     }
 
     function renderCadParametrosInputs() {
@@ -9281,6 +9414,15 @@
 
     document.getElementById('formNovaAnalise').addEventListener('submit', async (e) => {
       e.preventDefault();
+      // Capturados antes de qualquer mutação de estado para poder avisar o usuário, com as
+      // contagens/atividades afetadas, quando esta edição na verdade move o Setor/Atividade
+      // de lugar (Área ou Setor de destino diferentes do original).
+      const setorOriginalParaMover = entityFormMode === 'setor' && editingEntityId
+        ? state.setoresCadastrados.find(s => valorComparavel(s.ID_Setor) === valorComparavel(editingEntityId))
+        : null;
+      const analiseOriginalParaMover = entityFormMode === 'atividade' && editingEntityId
+        ? state.analises.find(a => valorComparavel(a.ID_Analise) === valorComparavel(editingEntityId))
+        : null;
       let areaRegistro = obterAreaFormulario();
       let setorRegistro = entityFormMode !== 'area' ? obterSetorFormulario() : null;
       let atividadeRegistro = entityFormMode === 'atividade' ? obterAtividadeFormulario() : null;
@@ -9443,6 +9585,28 @@
           nomeSetor: nomeSetorFinal,
           sequenciaSetor
         };
+        if (
+          setorOriginalParaMover &&
+          valorComparavel(setorOriginalParaMover.ID_Area) !== valorComparavel(idArea)
+        ) {
+          const areaOriginalNome = state.areasCadastradas.find(ar =>
+            valorComparavel(ar.ID_Area) === valorComparavel(setorOriginalParaMover.ID_Area)
+          )?.Nome || '';
+          const atividadesAfetadas = state.analises.filter(a =>
+            a.Area === areaOriginalNome && a.Setor === setorOriginalParaMover.Nome
+          );
+          const idsAtividadesAfetadas = new Set(atividadesAfetadas.map(a => valorComparavel(a.ID_Analise)));
+          const totalContagensAfetadas = state.allContagens.filter(c =>
+            idsAtividadesAfetadas.has(valorComparavel(c.ID_Analise))
+          ).length;
+          const mensagemMoverSetor = `Mover o Setor "${setorOriginalParaMover.Nome}" para a Área "${nomeAreaFinal}"` +
+            (atividadesAfetadas.length
+              ? `, levando ${atividadesAfetadas.length} atividade${atividadesAfetadas.length > 1 ? 's' : ''}` +
+                (totalContagensAfetadas ? ` e ${totalContagensAfetadas} medição${totalContagensAfetadas > 1 ? 'ões' : ''}` : '') +
+                ' junto'
+              : '') + '. Deseja continuar?';
+          if (!await customConfirm(mensagemMoverSetor, 'Mover Setor')) return;
+        }
         void executarComSincronizacao(
           payload,
           sourceId ? 'Setor editado e validado na planilha!' : 'Novo Setor salvo e validado na planilha!',
@@ -9523,6 +9687,19 @@
       for(let i=1; i<=8; i++) {
         payload[`c${i}`] = document.getElementById(`cadC${i}`).value.trim();
         payload[`t${i}`] = document.getElementById(`cadT${i}`) ? document.getElementById(`cadT${i}`).value : 'numero';
+      }
+
+      if (
+        analiseOriginalParaMover &&
+        (analiseOriginalParaMover.Area !== nomeAreaFinal || analiseOriginalParaMover.Setor !== nomeSetorFinal)
+      ) {
+        const totalContagensAfetadas = state.allContagens.filter(c =>
+          valorComparavel(c.ID_Analise) === valorComparavel(analiseOriginalParaMover.ID_Analise)
+        ).length;
+        const mensagemMoverAtividade = `Mover a atividade "${analiseOriginalParaMover.Atividade}" para "${nomeAreaFinal} › ${nomeSetorFinal}"` +
+          (totalContagensAfetadas ? `, levando ${totalContagensAfetadas} medição${totalContagensAfetadas > 1 ? 'ões' : ''} junto` : '') +
+          '. Deseja continuar?';
+        if (!await customConfirm(mensagemMoverAtividade, 'Mover Atividade')) return;
       }
 
       // Protege a Cronoanálise na fila local antes de alterar a tela. A página
@@ -9748,6 +9925,7 @@
     function toggleModoExclusaoContagens() { state.modoExclusaoContagens = !state.modoExclusaoContagens; atualizarBotoesExclusaoContagens(); renderContagensTable(); }
     function atualizarBotoesExclusaoContagens() {
       document.getElementById('btnModoExcluirContagens').classList.toggle('d-none', state.modoExclusaoContagens);
+      document.getElementById('btnMoverContagens').classList.toggle('d-none', !state.modoExclusaoContagens);
       document.getElementById('btnConfirmarExclusaoContagens').classList.toggle('d-none', !state.modoExclusaoContagens);
       document.getElementById('btnCancelarExclusaoContagens').classList.toggle('d-none', !state.modoExclusaoContagens);
     }
@@ -9778,6 +9956,34 @@
       await executarComSincronizacao(
         { action: 'deleteMultipleContagens', ids: JSON.stringify(selecionados) },
         selecionados.length > 1 ? `${selecionados.length} medições excluídas e validadas na planilha!` : "Medição excluída e validada na planilha!",
+        () => { renderContagensTable(); }
+      );
+    }
+
+    async function abrirMoverContagensEmLote() {
+      const selecionados = Array.from(document.querySelectorAll('.chk-excluir-contagem:checked')).map(c => c.value);
+      if (selecionados.length === 0) { await customAlert('Selecione ao menos uma contagem.', 'Atenção'); return; }
+      const analiseOrigem = state.selectedAnalise;
+      if (!analiseOrigem) return;
+      const destinoId = await pedirDestinoAtividadeCompativel(analiseOrigem);
+      if (destinoId === null) return;
+      if (destinoId === '__NENHUMA__') {
+        await customAlert('Não existe nenhuma outra atividade com os mesmos campos personalizados desta. Para mover contagens, a atividade de destino precisa ter exatamente os mesmos campos.', 'Nenhum destino compatível');
+        return;
+      }
+      const analiseDestino = state.analises.find(a => valorComparavel(a.ID_Analise) === valorComparavel(destinoId));
+      if (!analiseDestino) return;
+      if (!await customConfirm(`Mover ${selecionados.length} medição${selecionados.length > 1 ? 'ões' : ''} para "${analiseDestino.Area} › ${analiseDestino.Setor} › ${analiseDestino.Atividade}"?`, 'Mover Medições')) return;
+
+      // Optimistic UI update
+      state.allContagens.forEach(c => {
+        if (selecionados.includes(c.ID_Contagem)) c.ID_Analise = analiseDestino.ID_Analise;
+      });
+      state.modoExclusaoContagens = false; atualizarBotoesExclusaoContagens(); renderContagensTable();
+
+      await executarComSincronizacao(
+        { action: 'moveMultipleContagens', ids: JSON.stringify(selecionados), idAnaliseDestino: analiseDestino.ID_Analise, idAnaliseOrigem: analiseOrigem.ID_Analise },
+        selecionados.length > 1 ? 'Medições movidas e validadas na planilha!' : 'Medição movida e validada na planilha!',
         () => { renderContagensTable(); }
       );
     }

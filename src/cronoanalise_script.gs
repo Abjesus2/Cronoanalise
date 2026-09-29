@@ -173,7 +173,7 @@ function ensureParadasReady_(ss) {
 
 function ensureWriteActionReady_(ss, action) {
   if (action === 'editContagem' || action === 'deleteContagem' ||
-      action === 'deleteMultipleContagens') {
+      action === 'deleteMultipleContagens' || action === 'moveMultipleContagens') {
     ensureContagensReady_(ss);
     return;
   }
@@ -338,6 +338,20 @@ function requireNewSequence_(value, label) {
     throw new Error(label + ' é obrigatória para um novo cadastro.');
   }
   return sequence;
+}
+
+// Compara a estrutura de campos personalizados (Campo_1..8, nome e tipo) de duas
+// atividades. Usada para permitir mover Contagens só entre atividades compatíveis,
+// já que cada campo (Campo_1_Valor etc.) só faz sentido no contexto do seu próprio nome/tipo.
+function mesmaEstruturaCampos_(analiseA, analiseB) {
+  for (var i = 1; i <= 8; i++) {
+    var nomeA = String(analiseA['Campo_' + i + '_Nome'] || '').trim();
+    var nomeB = String(analiseB['Campo_' + i + '_Nome'] || '').trim();
+    var tipoA = String(analiseA['Campo_' + i + '_Tipo'] || '').trim();
+    var tipoB = String(analiseB['Campo_' + i + '_Tipo'] || '').trim();
+    if (nomeA !== nomeB || tipoA !== tipoB) return false;
+  }
+  return true;
 }
 
 function canonicalizeParameterNames_(ss, data) {
@@ -1014,19 +1028,23 @@ function prepareWritePayload_(p) {
     addArea: true, editArea: true, addSetor: true, editSetor: true,
     deleteAreas: true, deleteSetores: true, deleteMultipleAnalises: true,
     addAnalise: true, editAnalise: true,
-    deleteMultipleContagens: true, deleteContagem: true, editContagem: true
+    deleteMultipleContagens: true, deleteContagem: true, editContagem: true,
+    moveMultipleAnalises: true, moveMultipleContagens: true
   };
   if (!supported[action]) throw new Error('Ação de gravação não reconhecida: ' + action);
 
   if (action === 'deleteAreas' || action === 'deleteSetores' ||
-      action === 'deleteMultipleAnalises' || action === 'deleteMultipleContagens') {
+      action === 'deleteMultipleAnalises' || action === 'deleteMultipleContagens' ||
+      action === 'moveMultipleAnalises' || action === 'moveMultipleContagens') {
     var ids;
     try {
       ids = JSON.parse(String(p.ids || '[]'));
     } catch (error) {
-      throw new Error('A lista de itens para exclusão está inválida.');
+      throw new Error('A lista de itens selecionados está inválida.');
     }
-    if (!Array.isArray(ids)) throw new Error('A lista de itens para exclusão está inválida.');
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new Error('Nenhum item foi selecionado.');
+    }
     p.__parsedIds = ids;
   }
   return p;
@@ -1235,6 +1253,35 @@ function doPost(e) {
         return noneOfFieldValuesExist_(ss, 'Analises', 'ID_Analise', ids) &&
           noneOfFieldValuesExist_(ss, 'Contagens', 'ID_Analise', ids);
       };
+    } else if (action === 'moveMultipleAnalises') {
+      // Move uma ou mais Atividades para outra Área/Setor já cadastrados. As Contagens
+      // continuam vinculadas pelo ID_Analise (não são tocadas aqui), então acompanham a
+      // atividade automaticamente. A sequência de cada atividade dentro do setor de destino
+      // é recalculada no fim (normalizeDynamicSequencesAfter), então não precisa escolher
+      // manualmente onde cada uma entra na nova ordem.
+      normalizeDynamicSequencesAfter = true;
+      var idsAnalisesMover = p.__parsedIds;
+      var areaDestinoMover = resolveAreaForAnalysis_(ss, { idArea: p.idArea });
+      var setorDestinoMover = resolveSetorForAnalysis_(ss, { idSetor: p.idSetor }, areaDestinoMover);
+      var camposDestinoMover = {
+        'Area': areaDestinoMover.Nome,
+        'Setor': setorDestinoMover.Nome,
+        'Sequencia_Area': safeSequence_(areaDestinoMover.Sequencia),
+        'Sequencia_Setor': safeSequence_(setorDestinoMover.Sequencia)
+      };
+      idsAnalisesMover.forEach(function(idAnaliseMover) {
+        var linhaMovida = writeFieldsByField_(ss, 'Analises', 'ID_Analise', idAnaliseMover, camposDestinoMover, false);
+        if (!linhaMovida) throw new Error('Uma das atividades selecionadas não foi encontrada.');
+      });
+      idProcessado = idsAnalisesMover.join(',');
+      validarAlteracao = function() {
+        return idsAnalisesMover.every(function(idAnaliseMover) {
+          return verifyFieldsByField(ss, 'Analises', 'ID_Analise', idAnaliseMover, {
+            'Area': areaDestinoMover.Nome,
+            'Setor': setorDestinoMover.Nome
+          });
+        });
+      };
     } else if (action === 'addAnalise' || action === 'editAnalise') {
       var idAnalise = p.idAnalise || createEntityId_('ANAL');
       var analiseAnterior = action === 'editAnalise'
@@ -1367,6 +1414,36 @@ function doPost(e) {
       idProcessado = idsContagens.join(',');
       validarAlteracao = function() {
         return noneOfFieldValuesExist_(ss, 'Contagens', 'ID_Contagem', idsContagens);
+      };
+    } else if (action === 'moveMultipleContagens') {
+      // Move uma ou mais Contagens para outra Atividade. Só é permitido entre atividades
+      // com a mesma estrutura de Campo_1..8 (mesmo nome e tipo) — caso contrário os valores
+      // registrados ficariam fora de contexto na atividade de destino (ex.: um valor de
+      // "Quantidade de peças" indo parar num campo "Tempo de setup"). A checagem é repetida
+      // aqui no servidor mesmo que a tela já filtre as opções, como segunda camada de proteção.
+      skipReadBackValidation = true;
+      var idsContagensMover = p.__parsedIds;
+      var analiseDestinoMover = getRecordByField_(ss, 'Analises', 'ID_Analise', p.idAnaliseDestino);
+      if (!analiseDestinoMover) throw new Error('A atividade de destino não foi encontrada.');
+      var analiseOrigemMover = p.idAnaliseOrigem
+        ? getRecordByField_(ss, 'Analises', 'ID_Analise', p.idAnaliseOrigem)
+        : null;
+      if (analiseOrigemMover && !mesmaEstruturaCampos_(analiseOrigemMover, analiseDestinoMover)) {
+        throw new Error('A atividade de destino tem campos diferentes da atividade de origem. Só é possível mover contagens entre atividades com a mesma estrutura de campos.');
+      }
+      idsContagensMover.forEach(function(idContagemMover) {
+        var linhaMovida = writeFieldsByField_(ss, 'Contagens', 'ID_Contagem', idContagemMover, {
+          'ID_Analise': analiseDestinoMover.ID_Analise
+        }, false);
+        if (!linhaMovida) throw new Error('Uma das contagens selecionadas não foi encontrada.');
+      });
+      idProcessado = idsContagensMover.join(',');
+      validarAlteracao = function() {
+        return idsContagensMover.every(function(idContagemMover) {
+          return verifyFieldsByField(ss, 'Contagens', 'ID_Contagem', idContagemMover, {
+            'ID_Analise': analiseDestinoMover.ID_Analise
+          });
+        });
       };
     } else if (action === 'deleteContagem') {
       skipReadBackValidation = true;
