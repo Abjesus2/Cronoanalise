@@ -1896,6 +1896,50 @@
 </head>
 <body>
 
+  <!-- Trava de acesso simples: barreira contra visitantes casuais, não é segurança forte
+       (o código roda no navegador, então a senha fica visível para quem inspecionar o código-fonte).
+       Uma vez digitada corretamente, fica lembrada neste navegador (localStorage). -->
+  <div id="cronoAccessGate" style="position:fixed;inset:0;z-index:99999;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:20px;">
+    <form id="cronoAccessForm" style="background:#fff;border-radius:16px;padding:32px;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;">
+      <div style="font-size:40px;margin-bottom:8px;">🔒</div>
+      <h1 style="font-size:20px;margin:0 0 4px;color:#0f172a;">Cronoanálise</h1>
+      <p style="color:#64748b;font-size:14px;margin:0 0 20px;">Digite a senha de acesso</p>
+      <input type="password" id="cronoAccessInput" autocomplete="off" placeholder="Senha" style="width:100%;padding:10px 14px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px;margin-bottom:10px;box-sizing:border-box;" required>
+      <div id="cronoAccessError" style="color:#dc2626;font-size:13px;min-height:18px;margin-bottom:10px;"></div>
+      <button type="submit" style="width:100%;padding:10px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:700;font-size:15px;cursor:pointer;">Entrar</button>
+    </form>
+  </div>
+  <script>
+    (function () {
+      var SENHA = 'Arezzo';
+      var CHAVE = 'crono_acesso_liberado_v1';
+      var gate = document.getElementById('cronoAccessGate');
+      var form = document.getElementById('cronoAccessForm');
+      var input = document.getElementById('cronoAccessInput');
+      var erro = document.getElementById('cronoAccessError');
+      var liberado = false;
+      try { liberado = window.localStorage.getItem(CHAVE) === '1'; } catch (e) { liberado = false; }
+      if (liberado) {
+        gate.style.display = 'none';
+      } else {
+        document.body.style.overflow = 'hidden';
+        setTimeout(function () { try { input.focus(); } catch (e) {} }, 0);
+      }
+      form.addEventListener('submit', function (evento) {
+        evento.preventDefault();
+        if (input.value === SENHA) {
+          try { window.localStorage.setItem(CHAVE, '1'); } catch (e) {}
+          gate.style.display = 'none';
+          document.body.style.overflow = '';
+        } else {
+          erro.textContent = 'Senha incorreta. Tente novamente.';
+          input.value = '';
+          input.focus();
+        }
+      });
+    })();
+  </script>
+
   <datalist id="dlAreas"></datalist>
   <datalist id="dlSetores"></datalist>
   <datalist id="dlAtividades"></datalist>
@@ -2253,6 +2297,14 @@
         <h4>Áreas de Atuação</h4>
         <div class="d-flex gap-2 flex-wrap">
           <button class="btn btn-primary btn-sm d-flex align-items-center gap-1" onclick="abrirFormularioArea()"><i class="fa-solid fa-plus"></i> Nova Área</button>
+          <div class="dropdown">
+            <button class="btn btn-outline-success btn-sm dropdown-toggle d-flex align-items-center gap-1" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-file-export"></i> Exportar</button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('csv', {}); return false;"><i class="fa-solid fa-file-csv me-2 text-success"></i>Exportar CSV de tudo</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('xlsx', {}); return false;"><i class="fa-solid fa-file-excel me-2 text-success"></i>Exportar Excel de tudo</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopoDOCX({}); return false;"><i class="fa-solid fa-file-word me-2 text-primary"></i>Exportar DOCX de tudo</a></li>
+            </ul>
+          </div>
           <button class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="btnModoExcluirAreas" onclick="toggleModoExclusaoAreas()"><i class="fa-solid fa-trash-can"></i> Excluir</button>
           <button class="btn btn-danger btn-sm d-flex align-items-center gap-1 d-none" id="btnConfirmarExclusaoAreas" onclick="confirmarExclusaoAreasEmLote()"><i class="fa-solid fa-check"></i> Confirmar</button>
           <button class="btn btn-secondary btn-sm d-flex align-items-center gap-1 d-none" id="btnCancelarExclusaoAreas" onclick="toggleModoExclusaoAreas()"><i class="fa-solid fa-xmark"></i> Cancelar</button>
@@ -2273,6 +2325,7 @@
             <ul class="dropdown-menu dropdown-menu-end">
               <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('csv', { area: currentArea }); return false;"><i class="fa-solid fa-file-csv me-2 text-success"></i>Exportar CSV desta Área</a></li>
               <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('xlsx', { area: currentArea }); return false;"><i class="fa-solid fa-file-excel me-2 text-success"></i>Exportar Excel desta Área</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopoDOCX({ area: currentArea }); return false;"><i class="fa-solid fa-file-word me-2 text-primary"></i>Exportar DOCX desta Área</a></li>
             </ul>
           </div>
           <button class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="btnModoExcluirSetores" onclick="toggleModoExclusaoSetores()"><i class="fa-solid fa-trash-can"></i> Excluir</button>
@@ -2294,6 +2347,7 @@
             <ul class="dropdown-menu dropdown-menu-end">
               <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('csv', { area: currentArea, setor: currentSetor }); return false;"><i class="fa-solid fa-file-csv me-2 text-success"></i>Exportar CSV deste Setor</a></li>
               <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('xlsx', { area: currentArea, setor: currentSetor }); return false;"><i class="fa-solid fa-file-excel me-2 text-success"></i>Exportar Excel deste Setor</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopoDOCX({ area: currentArea, setor: currentSetor }); return false;"><i class="fa-solid fa-file-word me-2 text-primary"></i>Exportar DOCX deste Setor</a></li>
             </ul>
           </div>
           <button class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="btnModoExcluir" onclick="toggleModoExclusao()"><i class="fa-solid fa-trash-can"></i> Excluir</button>
@@ -11002,17 +11056,28 @@
       setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
 
-    async function exportarDashboardDOCX() {
+    // Núcleo reutilizável do relatório DOCX: recebe analises/contagens já filtradas pelo
+    // escopo desejado (Dashboard com seus filtros, ou uma Área/Setor específicos navegados
+    // diretamente) e monta o mesmo relatório completo (legenda, sequência do processo,
+    // estrutura e medições) para qualquer um desses escopos.
+    async function gerarRelatorioCronoanaliseDOCX({
+      analises,
+      contagens,
+      rotuloEscopo,
+      nomeArquivo,
+      mensagemVazio,
+      tituloVazio,
+      botaoId
+    }) {
       if (exportacaoDocxEmAndamento) return;
-      const contexto = obterContextoDashboardDocx();
-      if (!contexto.contagens.length || !contexto.analises.length) {
-        await customAlert('Não há medições nos filtros atuais para gerar o documento Word.', 'Dashboard sem dados');
+      if (!contagens.length || !analises.length) {
+        await customAlert(mensagemVazio, tituloVazio);
         return;
       }
-      const opcoesInclusao = await pedirOpcoesInclusaoExportacao('docx', 'Exportar Dashboard em DOCX');
+      const opcoesInclusao = await pedirOpcoesInclusaoExportacao('docx', `Exportar ${rotuloEscopo} em DOCX`);
       if (!opcoesInclusao) return;
 
-      const botao = document.getElementById('btnExportarDashboardDocx');
+      const botao = botaoId ? document.getElementById(botaoId) : null;
       const conteudoOriginal = botao ? botao.innerHTML : '';
       exportacaoDocxEmAndamento = true;
       if (botao) {
@@ -11024,14 +11089,9 @@
       try {
         const docxApi = await obterBibliotecaDocx();
         const { Document, Packer, Paragraph, TextRun, AlignmentType, Footer } = docxApi;
-        const areas = new Set(contexto.analises.map(analise => analise.Area || '')).size;
-        const setores = new Set(contexto.analises.map(analise => `${analise.Area || ''}\u0000${analise.Setor || ''}`)).size;
+        const areasCount = new Set(analises.map(analise => analise.Area || '')).size;
+        const setoresCount = new Set(analises.map(analise => `${analise.Area || ''}\u0000${analise.Setor || ''}`)).size;
         const formatoTempo = `${obterRotuloFormatoTempo(state.exportTimeFormat)} · ${obterConfiguracaoTempo(state.exportTimeMode).label}`;
-        const escopo = [
-          contexto.filtros.area ? `Área: ${contexto.filtros.area}` : 'Todas as áreas',
-          contexto.filtros.setor ? `Setor: ${contexto.filtros.setor}` : 'Todos os setores',
-          contexto.filtros.atividade ? `Atividade: ${contexto.filtros.atividade}` : 'Todas as atividades'
-        ].join(' · ');
         const agora = new Date().toLocaleString('pt-BR');
         const filhos = [
           new Paragraph({
@@ -11046,21 +11106,21 @@
           }),
           criarTabelaChaveValorDocx(docxApi, [
             ['Gerado em', agora],
-            ['Escopo dos filtros', escopo],
+            ['Escopo', rotuloEscopo],
             ['Formato dos tempos', formatoTempo],
-            ['Conteúdo', `${areas} área(s) · ${setores} setor(es) · ${contexto.analises.length} atividade(s) · ${contexto.contagens.length} contagem(ns)`]
+            ['Conteúdo', `${areasCount} área(s) · ${setoresCount} setor(es) · ${analises.length} atividade(s) · ${contagens.length} contagem(ns)`]
           ]),
           ...criarLegendaDocumentoDocx(docxApi),
-          ...criarSequenciaProcessoDocx(docxApi, contexto.analises),
-          ...criarEstruturaInicialDocx(docxApi, contexto.analises, contexto.contagens, opcoesInclusao),
-          ...criarMedicoesPorAtividadeDocx(docxApi, contexto.analises, contexto.contagens, opcoesInclusao)
+          ...criarSequenciaProcessoDocx(docxApi, analises),
+          ...criarEstruturaInicialDocx(docxApi, analises, contagens, opcoesInclusao),
+          ...criarMedicoesPorAtividadeDocx(docxApi, analises, contagens, opcoesInclusao)
         ];
 
         const documento = new Document({
           creator: 'Cronoanálise - Portal de Gestão',
           title: 'Relatório de Cronoanálise',
           subject: 'Estrutura do processo e medições separadas por atividade',
-          description: 'Relatório exportado pelo Dashboard do sistema Cronoanálise.',
+          description: 'Relatório exportado pelo sistema Cronoanálise.',
           styles: {
             default: {
               document: {
@@ -11083,9 +11143,9 @@
           }]
         });
         const blob = await Packer.toBlob(documento);
-        baixarBlobDocx(blob, nomeArquivoDashboardDocx());
+        baixarBlobDocx(blob, nomeArquivo);
       } catch (erro) {
-        console.error('Falha ao exportar o Dashboard em DOCX:', erro);
+        console.error('Falha ao exportar o relatório em DOCX:', erro);
         await customAlert(escapeHTML(erro && erro.message ? erro.message : 'Não foi possível gerar o documento Word.'), 'Falha na exportação DOCX');
       } finally {
         exportacaoDocxEmAndamento = false;
@@ -11095,6 +11155,48 @@
           botao.innerHTML = conteudoOriginal;
         }
       }
+    }
+
+    async function exportarDashboardDOCX() {
+      const contexto = obterContextoDashboardDocx();
+      const rotuloEscopo = [
+        contexto.filtros.area ? `Área: ${contexto.filtros.area}` : 'Todas as áreas',
+        contexto.filtros.setor ? `Setor: ${contexto.filtros.setor}` : 'Todos os setores',
+        contexto.filtros.atividade ? `Atividade: ${contexto.filtros.atividade}` : 'Todas as atividades'
+      ].join(' · ');
+      await gerarRelatorioCronoanaliseDOCX({
+        analises: contexto.analises,
+        contagens: contexto.contagens,
+        rotuloEscopo,
+        nomeArquivo: nomeArquivoDashboardDocx(),
+        mensagemVazio: 'Não há medições nos filtros atuais para gerar o documento Word.',
+        tituloVazio: 'Dashboard sem dados',
+        botaoId: 'btnExportarDashboardDocx'
+      });
+    }
+
+    // Mesmo relatório completo, mas a partir da Área (e opcionalmente Setor) navegada
+    // diretamente nas telas "Áreas de Atuação" / "Setores em" / "Atividades de" — sem
+    // precisar ir até o Dashboard configurar os filtros manualmente.
+    async function exportarDadosEscopoDOCX({ area = '', setor = '' } = {}) {
+      const analisesEscopo = state.analises
+        .filter(a => (!area || a.Area === area) && (!setor || a.Setor === setor))
+        .sort(compararAnalisesDocx);
+      const idsEscopo = new Set(analisesEscopo.map(a => valorComparavel(a.ID_Analise)));
+      const contagensEscopo = state.allContagens.filter(c => idsEscopo.has(valorComparavel(c.ID_Analise)));
+      const rotuloEscopo = setor
+        ? `Setor: ${setor} (Área: ${area})`
+        : area
+          ? `Área: ${area}`
+          : 'Todas as áreas';
+      await gerarRelatorioCronoanaliseDOCX({
+        analises: analisesEscopo,
+        contagens: contagensEscopo,
+        rotuloEscopo,
+        nomeArquivo: `${nomeArquivoEscopoExportacao(area, setor)}_${Date.now()}.docx`,
+        mensagemVazio: 'Não há medições registradas neste escopo para gerar o documento Word.',
+        tituloVazio: 'Sem dados para exportar'
+      });
     }
 
     function formatarNumeroResumoDocx(valor, casas = 2) {
