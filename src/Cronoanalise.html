@@ -2262,6 +2262,13 @@
         <h4 class="text-break">Setores em: <span id="lblAreaSelected" class="text-primary"></span></h4>
         <div class="d-flex gap-2 flex-wrap">
           <button class="btn btn-primary btn-sm d-flex align-items-center gap-1" onclick="abrirFormularioSetor(null, obterAreaAtual()?.ID_Area)"><i class="fa-solid fa-plus"></i> Novo Setor</button>
+          <div class="dropdown">
+            <button class="btn btn-outline-success btn-sm dropdown-toggle d-flex align-items-center gap-1" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-file-export"></i> Exportar</button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('csv', { area: currentArea }); return false;"><i class="fa-solid fa-file-csv me-2 text-success"></i>Exportar CSV desta Área</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('xlsx', { area: currentArea }); return false;"><i class="fa-solid fa-file-excel me-2 text-success"></i>Exportar Excel desta Área</a></li>
+            </ul>
+          </div>
           <button class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="btnModoExcluirSetores" onclick="toggleModoExclusaoSetores()"><i class="fa-solid fa-trash-can"></i> Excluir</button>
           <button class="btn btn-danger btn-sm d-flex align-items-center gap-1 d-none" id="btnConfirmarExclusaoSetores" onclick="confirmarExclusaoSetoresEmLote()"><i class="fa-solid fa-check"></i> Confirmar</button>
           <button class="btn btn-secondary btn-sm d-flex align-items-center gap-1 d-none" id="btnCancelarExclusaoSetores" onclick="toggleModoExclusaoSetores()"><i class="fa-solid fa-xmark"></i> Cancelar</button>
@@ -2276,6 +2283,13 @@
         <h4 class="text-break">Atividades de: <span id="lblSetorSelected" class="text-primary"></span></h4>
         <div class="d-flex gap-2 flex-wrap">
           <button class="btn btn-primary btn-sm d-flex align-items-center gap-1" onclick="abrirFormularioAtividade(null, obterAreaAtual()?.ID_Area, obterSetorAtual()?.ID_Setor)"><i class="fa-solid fa-plus"></i> Nova Atividade</button>
+          <div class="dropdown">
+            <button class="btn btn-outline-success btn-sm dropdown-toggle d-flex align-items-center gap-1" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-file-export"></i> Exportar</button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('csv', { area: currentArea, setor: currentSetor }); return false;"><i class="fa-solid fa-file-csv me-2 text-success"></i>Exportar CSV deste Setor</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportarDadosEscopo('xlsx', { area: currentArea, setor: currentSetor }); return false;"><i class="fa-solid fa-file-excel me-2 text-success"></i>Exportar Excel deste Setor</a></li>
+            </ul>
+          </div>
           <button class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" id="btnModoExcluir" onclick="toggleModoExclusao()"><i class="fa-solid fa-trash-can"></i> Excluir</button>
           <button class="btn btn-danger btn-sm d-flex align-items-center gap-1 d-none" id="btnConfirmarExclusao" onclick="confirmarExclusaoEmLote()"><i class="fa-solid fa-check"></i> Confirmar</button>
           <button class="btn btn-secondary btn-sm d-flex align-items-center gap-1 d-none" id="btnCancelarExclusao" onclick="toggleModoExclusao()"><i class="fa-solid fa-xmark"></i> Cancelar</button>
@@ -13584,16 +13598,67 @@
 
     async function exportarDadosFiltrados(tipo) {
       const contagens = state.dashFilteredContagens || [];
-      const dados = montarDadosExportacaoDe(contagens);
       const opcoes = await pedirOpcoesInclusaoExportacao(tipo, 'Exportar dados do Dashboard');
       if (!opcoes) return;
-      const idsAnalises = new Set(contagens.map(contagem => String(contagem.ID_Analise)));
-      const analises = state.analises.filter(analise => idsAnalises.has(String(analise.ID_Analise)));
-      const dadosAtividades = alguma(opcoes) ? montarDadosAtividadesExportacao(analises, opcoes) : [];
-      if (tipo === 'csv') {
-        await gerarCSV(dados, 'crono_dash', dadosAtividades);
-      } else {
-        await gerarExcel(dados, 'crono_dash', 'Medições', dadosAtividades);
+      const toastId = mostrarNotificacao('Preparando exportação...', 'sync', `toast_export_${Date.now()}`);
+      try {
+        const dados = montarDadosExportacaoDe(contagens);
+        const idsAnalises = new Set(contagens.map(contagem => String(contagem.ID_Analise)));
+        const analises = state.analises.filter(analise => idsAnalises.has(String(analise.ID_Analise)));
+        const dadosAtividades = alguma(opcoes) ? montarDadosAtividadesExportacao(analises, opcoes) : [];
+        if (tipo === 'csv') {
+          await gerarCSV(dados, 'crono_dash', dadosAtividades);
+        } else {
+          await gerarExcel(dados, 'crono_dash', 'Medições', dadosAtividades);
+        }
+        mostrarNotificacao('Exportação concluída — confira os downloads do navegador.', 'success', toastId);
+      } catch (erro) {
+        console.error('Falha ao exportar dados do Dashboard:', erro);
+        mostrarNotificacao(erro && erro.message ? erro.message : 'Não foi possível exportar os dados.', 'danger', toastId);
+      }
+    }
+
+    function nomeArquivoEscopoExportacao(area, setor) {
+      const normalizar = texto => String(texto || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const partes = ['crono', normalizar(area) || 'area', ...(setor ? [normalizar(setor) || 'setor'] : [])];
+      return partes.join('_');
+    }
+
+    // Exporta CSV/Excel filtrados pela Área (e, opcionalmente, pelo Setor) atualmente aberta na
+    // navegação — sem precisar ir até o Dashboard e reconfigurar os filtros manualmente lá.
+    async function exportarDadosEscopo(tipo, { area = '', setor = '' } = {}) {
+      const analisesEscopo = state.analises.filter(a =>
+        (!area || a.Area === area) && (!setor || a.Setor === setor)
+      );
+      if (!analisesEscopo.length) {
+        await customAlert('Não há atividades cadastradas neste escopo para exportar.', 'Aviso');
+        return;
+      }
+      const idsEscopo = new Set(analisesEscopo.map(a => valorComparavel(a.ID_Analise)));
+      const contagensEscopo = state.allContagens.filter(c => idsEscopo.has(valorComparavel(c.ID_Analise)));
+      if (!contagensEscopo.length) {
+        await customAlert('Não há medições registradas neste escopo para exportar.', 'Aviso');
+        return;
+      }
+      const titulo = setor ? `Exportar dados do Setor ${setor}` : `Exportar dados da Área ${area}`;
+      const opcoes = await pedirOpcoesInclusaoExportacao(tipo, titulo);
+      if (!opcoes) return;
+      const toastId = mostrarNotificacao('Preparando exportação...', 'sync', `toast_export_${Date.now()}`);
+      try {
+        const dados = montarDadosExportacaoDe(contagensEscopo);
+        const dadosAtividades = alguma(opcoes) ? montarDadosAtividadesExportacao(analisesEscopo, opcoes) : [];
+        const nomeBase = nomeArquivoEscopoExportacao(area, setor);
+        if (tipo === 'csv') {
+          await gerarCSV(dados, nomeBase, dadosAtividades);
+        } else {
+          await gerarExcel(dados, nomeBase, 'Medições', dadosAtividades);
+        }
+        mostrarNotificacao('Exportação concluída — confira os downloads do navegador.', 'success', toastId);
+      } catch (erro) {
+        console.error('Falha ao exportar dados do escopo atual:', erro);
+        mostrarNotificacao(erro && erro.message ? erro.message : 'Não foi possível exportar os dados.', 'danger', toastId);
       }
     }
 
@@ -13616,17 +13681,24 @@
       }));
       const opcoes = await pedirOpcoesInclusaoExportacao(tipo, 'Exportar Resumo Estatístico');
       if (!opcoes) return;
-      const analises = linhasResumo.map(linha => linha.analise);
-      const dadosAtividades = alguma(opcoes) ? montarDadosAtividadesExportacao(analises, opcoes) : [];
-      if (tipo === 'csv') {
-        await gerarCSV(dados, 'resumo_estatistico', dadosAtividades);
-      } else {
-        await gerarExcel(
-          dados,
-          'resumo_estatistico',
-          'Resumo Estatístico',
-          dadosAtividades
-        );
+      const toastId = mostrarNotificacao('Preparando exportação...', 'sync', `toast_export_${Date.now()}`);
+      try {
+        const analises = linhasResumo.map(linha => linha.analise);
+        const dadosAtividades = alguma(opcoes) ? montarDadosAtividadesExportacao(analises, opcoes) : [];
+        if (tipo === 'csv') {
+          await gerarCSV(dados, 'resumo_estatistico', dadosAtividades);
+        } else {
+          await gerarExcel(
+            dados,
+            'resumo_estatistico',
+            'Resumo Estatístico',
+            dadosAtividades
+          );
+        }
+        mostrarNotificacao('Exportação concluída — confira os downloads do navegador.', 'success', toastId);
+      } catch (erro) {
+        console.error('Falha ao exportar o Resumo Estatístico:', erro);
+        mostrarNotificacao(erro && erro.message ? erro.message : 'Não foi possível exportar os dados.', 'danger', toastId);
       }
     }
 
