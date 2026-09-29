@@ -1910,6 +1910,12 @@
       <div class="navbar-actions">
         <div class="navbar-shortcuts">
           <button class="btn btn-outline-light btn-sm" onclick="navToHome()" title="Início" data-bs-placement="bottom" aria-label="Início"><i class="fa-solid fa-house me-1" aria-hidden="true"></i><span class="navbar-home-label">Início</span></button>
+          <!-- Botão "Abrir em nova aba" só aparece quando a página está embutida (Google Sites, etc.).
+               No iframe do Sites, downloads (exportar CSV/Excel/DOCX), impressão e modais funcionam
+               pior ou não funcionam — abrir a ferramenta numa aba própria resolve. -->
+          <a id="btnAbrirNovaAba" class="btn btn-outline-warning btn-sm" hidden target="_blank" rel="noopener" title="Abrir esta ferramenta em uma nova aba (recomendado ao usar via Google Sites, especialmente para exportar dados)" aria-label="Abrir em nova aba">
+            <i class="fa-solid fa-up-right-from-square me-1" aria-hidden="true"></i><span class="navbar-newtab-label">Abrir em nova aba</span>
+          </a>
           <div class="dropdown change-history-dropdown">
             <button class="btn btn-outline-light btn-sm dropdown-toggle change-history-button" id="btnHistoricoAlteracoes" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Central de notificações" data-bs-placement="bottom" aria-label="Abrir central de notificações">
               <i class="fa-solid fa-bell" id="notificationMainIcon" aria-hidden="true"></i>
@@ -2866,6 +2872,14 @@
     // Ao publicar uma nova versão, atualize APP_VERSION para facilitar o diagnóstico ("qual versão você está usando?").
     const APP_VERSION = "2026-09-02.2";
 
+    // URL pública que o botão "Abrir em nova aba" deve abrir.
+    // Cole aqui o link da página do Google Sites que embute esta ferramenta
+    // (ex.: "https://sites.google.com/view/sua-empresa/cronoanalise").
+    // Dentro do iframe do Google Sites, window.location.href aponta para uma URL interna
+    // do Google (googleusercontent.com) que não abre a página real — por isso o botão precisa
+    // saber a URL correta. Deixe em branco ("") para o botão não aparecer.
+    const PAGE_URL = "https://sites.google.com/view/crono-analise/cronoanalise";
+
     // Wrapper de armazenamento tolerante a iframes do Google Sites.
     // O Chrome (Privacy Sandbox) bloqueia localStorage em iframes de terceiros;
     // sem esse wrapper cada leitura/gravação lança SecurityError e derruba a UI.
@@ -3123,6 +3137,7 @@
     document.addEventListener("DOMContentLoaded", () => {
       // Mantém a sequência de inicialização comprovadamente funcional da v23.
       // Recursos visuais novos são isolados para nunca impedirem a leitura da planilha.
+      configurarBotaoAbrirNovaAba_();
       initTheme();
       inicializarPreferenciasTempo();
       configurarMenusVisualizacaoTempo();
@@ -7875,6 +7890,35 @@
     }
     function alguma(opcoes) {
       return !!(opcoes && (opcoes.descricao || opcoes.criterios || opcoes.consideracoes));
+    }
+
+    // Só exibe o botão quando: (a) a página está embutida em outro site (iframe do Google Sites)
+    // e (b) você configurou PAGE_URL com a URL pública da página que embute a ferramenta.
+    // Dentro do iframe cross-origin do Sites não é possível descobrir a URL do site pai
+    // automaticamente (o navegador bloqueia por segurança), então a URL precisa ser explícita.
+    function configurarBotaoAbrirNovaAba_() {
+      const botao = document.getElementById('btnAbrirNovaAba');
+      if (!botao) return;
+      let embutido = false;
+      try { embutido = window.self !== window.top; } catch (_) { embutido = true; }
+      const urlConfigurada = String(PAGE_URL || '').trim();
+      if (!embutido || !urlConfigurada) { botao.hidden = true; return; }
+      botao.href = urlConfigurada;
+      botao.target = '_blank';
+      botao.rel = 'noopener';
+      // Alguns navegadores/bloqueadores impedem <a target="_blank"> disparado indiretamente.
+      // O onclick garante que a nova aba abra mesmo assim, mantendo o href como fallback acessível.
+      botao.addEventListener('click', function(evento) {
+        evento.preventDefault();
+        const janela = window.open(urlConfigurada, '_blank', 'noopener');
+        if (!janela) {
+          // Pop-up bloqueado — cai para navegação do próprio iframe (sai do embed).
+          try { window.top.location.href = urlConfigurada; } catch (_) {
+            window.location.href = urlConfigurada;
+          }
+        }
+      });
+      botao.hidden = false;
     }
 
     // Marca a versão do aplicativo em um data-attribute do <body> e loga no console
