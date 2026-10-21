@@ -13990,63 +13990,123 @@
       const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `${nomeBase}_${Date.now()}.csv`; link.click(); URL.revokeObjectURL(url);
     }
 
-    // Aba extra do Excel com um "conversor" de formato de tempo: a pessoa digita o formato
-    // desejado numa célula (Relogio, Decimal ou Minutos) e duas colunas com fórmula recalculam
-    // o tempo cronometrado e o tempo por unidade de TODAS as medições a partir do segundo com
-    // precisão total — sem precisar reexportar o arquivo para trocar de formato.
+    // Aba que espelha a aba de Medições, coluna a coluna, mas com o tempo recalculado por fórmula
+    // a partir de duas células de seleção — "Formato de visualização" e "Precisão de visualização"
+    // — com as MESMAS opções do site. A aba de Medições funciona como base: as fórmulas aqui puxam
+    // o segundo com precisão total de lá (duas colunas extras são acrescentadas ao final dela) e
+    // mostram, em colunas auxiliares (G/H para o tempo cronometrado e J/K para o tempo por
+    // unidade), cada etapa do cálculo até chegar no valor final das colunas F e I — assim quem
+    // abrir a planilha entende como o resultado foi obtido, em vez de uma fórmula "caixa-preta".
     // Limitação da biblioteca gratuita usada aqui (SheetJS Community): não é possível criar uma
-    // lista suspensa nativa do Excel (recurso só da versão paga), por isso o formato é digitado
-    // numa célula, não escolhido num menu.
-    function criarAbaConversorTempo(workbook, dados) {
-      const linhasValidas = dados.filter(l => Number.isFinite(l._segTotal));
-      if (!linhasValidas.length) return;
+    // lista suspensa nativa do Excel (recurso só da versão paga) — por isso o formato/precisão são
+    // digitados numa célula, com o texto exatamente igual ao das opções do site, em vez de
+    // escolhidos num menu.
+    function criarAbaMedicoesConvertidas(workbook, dados, nomeAbaMedicoes) {
+      if (!dados.length || !Number.isFinite(dados[0]._segTotal)) return;
+      const headersMedicoes = Object.keys(dados[0]);
+      const IDX_TEMPO_CRON = 5;
+      const IDX_TEMPO_UNIDADE = 6;
+      if (headersMedicoes.length <= IDX_TEMPO_UNIDADE) return;
+      const wsMedicoes = workbook.Sheets[nomeAbaMedicoes];
+      if (!wsMedicoes) return;
 
-      const casas = obterConfiguracaoTempo(state.exportTimeMode).decimals;
-      const potencia = 10 ** casas;
-      const unidadesHora = 3600 * potencia;
-      const unidadesMinuto = 60 * potencia;
-      const zerosFracao = '0'.repeat(casas);
-      const formatoNumero = casas > 0 ? `0.${zerosFracao}` : '0';
-      const formatoPadrao = { clock: 'Relogio', decimal: 'Decimal', minutes: 'Minutos' }[obterFormatoTempoValido(state.exportTimeFormat)] || 'Decimal';
+      const colLetra = XLSX.utils.encode_col;
+      const idxRawTotal = headersMedicoes.length;
+      const idxRawUnidade = headersMedicoes.length + 1;
 
-      const LINHA_CABECALHO = 3; // 0-based (linha 4 na planilha)
-      const linhasBrutas = [
-        ['Formato de tempo (digite exatamente):', formatoPadrao, '', 'Valores aceitos: Relogio, Decimal ou Minutos'],
-        ['', '', '', 'As colunas G e H (auxiliares) servem só de apoio ao cálculo — não apague.'],
-        [],
-        ['Área', 'Setor', 'Atividade', 'Data/Hora', 'Tempo Cronometrado (s)', 'Tempo por Unidade (s)', 'Aux. Cronometrado', 'Aux. Unidade', 'Tempo Cronometrado (convertido)', 'Tempo por Unidade (convertido)']
-      ];
-      linhasValidas.forEach(l => {
-        const segUnidade = Number.isFinite(l._segUnidade) ? l._segUnidade : '';
-        linhasBrutas.push([l['Área'] || '', l['Setor'] || '', l['Atividade'] || '', l['Data/Hora'] || '', l._segTotal, segUnidade, '', '', '', '']);
+      // 1) Acrescenta, ao final da aba de Medições já criada, duas colunas com o segundo "cru"
+      // (precisão total) de cada medição — é nelas que as fórmulas da nova aba vão se basear.
+      wsMedicoes[XLSX.utils.encode_cell({ r: 0, c: idxRawTotal })] = { t: 's', v: 'Tempo Cronometrado (segundos — base p/ fórmulas)' };
+      wsMedicoes[XLSX.utils.encode_cell({ r: 0, c: idxRawUnidade })] = { t: 's', v: 'Tempo por Unidade (segundos — base p/ fórmulas)' };
+      dados.forEach((linha, i) => {
+        const r = i + 1;
+        const segUnidade = Number.isFinite(linha._segUnidade) ? linha._segUnidade : '';
+        wsMedicoes[XLSX.utils.encode_cell({ r, c: idxRawTotal })] = { t: 'n', v: linha._segTotal, z: '0.000' };
+        wsMedicoes[XLSX.utils.encode_cell({ r, c: idxRawUnidade })] = segUnidade === ''
+          ? { t: 's', v: '' }
+          : { t: 'n', v: segUnidade, z: '0.000' };
       });
+      const refMedicoes = XLSX.utils.decode_range(wsMedicoes['!ref']);
+      refMedicoes.e.c = Math.max(refMedicoes.e.c, idxRawUnidade);
+      wsMedicoes['!ref'] = XLSX.utils.encode_range(refMedicoes);
+
+      // 2) Mapa das colunas que são cópia direta (fórmula de referência) da aba de Medições — todas,
+      // exceto as duas colunas de tempo, que ganham o bloco de 6 colunas (F,G,H / I,J,K) abaixo.
+      const mapaColunasCopia = [];
+      for (let origIdx = 0; origIdx < headersMedicoes.length; origIdx++) {
+        if (origIdx === IDX_TEMPO_CRON || origIdx === IDX_TEMPO_UNIDADE) continue;
+        const novoIdx = origIdx < IDX_TEMPO_CRON ? origIdx : origIdx + 4;
+        mapaColunasCopia.push({ origIdx, novoIdx, rotulo: headersMedicoes[origIdx] });
+      }
+      const ultimoIdxNovo = Math.max(...mapaColunasCopia.map(m => m.novoIdx), 10);
+
+      // 3) Linhas de seleção, digitadas com o texto exatamente igual ao das opções do site
+      // ("Formato da visualização" e "Precisão da visualização" no menu de opções).
+      const formatoAtual = { clock: 'Formato de tempo (HH:MM:SS)', decimal: 'Decimal (segundos)', minutes: 'Minutos' }[obterFormatoTempoValido(state.exportTimeFormat)] || 'Decimal (segundos)';
+      const precisaoAtual = { second: 'Segundo', tenth: 'Décimo de segundo', hundredth: 'Centésimo de segundo', millisecond: 'Milésimo de segundo (milissegundo)' }[obterModoTempoValido(state.exportTimeMode)] || 'Décimo de segundo';
+      const linhasBrutas = [
+        ['Formato de visualização (digite exatamente uma das opções):', formatoAtual],
+        ['', '', '', 'Opções válidas: Formato de tempo (HH:MM:SS)  |  Decimal (segundos)  |  Minutos'],
+        ['Precisão de visualização (digite exatamente uma das opções):', precisaoAtual],
+        ['', '', '', 'Opções válidas: Segundo  |  Décimo de segundo  |  Centésimo de segundo  |  Milésimo de segundo (milissegundo)'],
+        []
+      ];
+      const LINHA_CABECALHO = linhasBrutas.length; // 0-based
+      const LINHA_DADOS_INICIO = LINHA_CABECALHO + 1;
+
+      const cabecalho = new Array(ultimoIdxNovo + 1).fill('');
+      cabecalho[5] = 'Tempo Cronometrado (conforme seleção acima)';
+      cabecalho[6] = 'Aux. Segundos (base)';
+      cabecalho[7] = 'Aux. Unidades (após aplicar a precisão)';
+      cabecalho[8] = 'Tempo por Unidade (conforme seleção acima)';
+      cabecalho[9] = 'Aux. Segundos por Unidade (base)';
+      cabecalho[10] = 'Aux. Unidades por Unidade (após aplicar a precisão)';
+      mapaColunasCopia.forEach(({ novoIdx, rotulo }) => { cabecalho[novoIdx] = rotulo; });
+      linhasBrutas.push(cabecalho);
 
       const worksheet = XLSX.utils.aoa_to_sheet(linhasBrutas);
 
+      // 4) "casas" (dígitos decimais) e "potência" (10^casas) são derivados do texto digitado em
+      // $B$3 (Precisão de visualização) e reaproveitados em toda fórmula desta aba.
+      const casasExpr = 'IF(TRIM($B$3)="Segundo",0,IF(TRIM($B$3)="Décimo de segundo",1,IF(TRIM($B$3)="Centésimo de segundo",2,3)))';
+      const potExpr = `(10^(${casasExpr}))`;
       const formulaRelogio = (colAux, r) => {
-        const base = `TEXT(INT(${colAux}${r}/${unidadesHora}),"00")&":"&TEXT(MOD(INT(${colAux}${r}/${unidadesMinuto}),60),"00")&":"&TEXT(MOD(INT(${colAux}${r}/${potencia}),60),"00")`;
-        return casas > 0 ? `${base}&"."&TEXT(MOD(${colAux}${r},${potencia}),"${zerosFracao}")` : base;
+        const horas = `TEXT(INT(${colAux}${r}/(3600*${potExpr})),"00")`;
+        const minutos = `TEXT(MOD(INT(${colAux}${r}/(60*${potExpr})),60),"00")`;
+        const segundos = `TEXT(MOD(INT(${colAux}${r}/${potExpr}),60),"00")`;
+        const fracao = `IF(${casasExpr}>0,"."&TEXT(MOD(${colAux}${r},${potExpr}),REPT("0",${casasExpr})),"")`;
+        return `${horas}&":"&${minutos}&":"&${segundos}&${fracao}`;
       };
-      const definirFormula = (linha0, coluna, formula) => {
-        worksheet[XLSX.utils.encode_cell({ r: linha0, c: coluna })] = { t: 'n', v: 0, f: formula };
+      const formulaConvertida = (colBase, colAux, r) =>
+        `IF(TRIM($B$1)="Formato de tempo (HH:MM:SS)",${formulaRelogio(colAux, r)},IF(TRIM($B$1)="Minutos",ROUND(${colBase}${r}/60,${casasExpr}),ROUND(${colBase}${r},${casasExpr})))`;
+
+      const definirFormula = (linha0, coluna, formula, extra = {}) => {
+        worksheet[XLSX.utils.encode_cell({ r: linha0, c: coluna })] = { t: 'n', v: 0, f: formula, ...extra };
       };
 
-      linhasValidas.forEach((_, indice) => {
-        const linha0 = LINHA_CABECALHO + 1 + indice; // 0-based
-        const r = linha0 + 1; // número da linha no estilo usado pelas fórmulas (1-based)
-        definirFormula(linha0, 6, `ROUND(E${r}*${potencia},0)`); // G: aux cronometrado
-        definirFormula(linha0, 7, `ROUND(F${r}*${potencia},0)`); // H: aux unidade
-        definirFormula(linha0, 8, `IF(TRIM($B$1)="Relogio",${formulaRelogio('G', r)},IF(TRIM($B$1)="Minutos",ROUND(E${r}/60,${casas}),ROUND(E${r},${casas})))`);
-        definirFormula(linha0, 9, `IF(TRIM($B$1)="Relogio",${formulaRelogio('H', r)},IF(TRIM($B$1)="Minutos",ROUND(F${r}/60,${casas}),ROUND(F${r},${casas})))`);
-        [4, 5].forEach(coluna => { worksheet[XLSX.utils.encode_cell({ r: linha0, c: coluna })].z = '0.000'; });
-        [8, 9].forEach(coluna => { worksheet[XLSX.utils.encode_cell({ r: linha0, c: coluna })].z = formatoNumero; });
+      dados.forEach((_, i) => {
+        const linha0 = LINHA_DADOS_INICIO + i; // 0-based nesta aba
+        const r = linha0 + 1; // linha no estilo 1-based usado pelas fórmulas desta aba
+        const medRow = i + 2; // linha correspondente na aba de Medições (1-based; cabeçalho é a linha 1)
+        const ref = (origIdx) => `'${nomeAbaMedicoes}'!${colLetra(origIdx)}${medRow}`;
+
+        mapaColunasCopia.forEach(({ origIdx, novoIdx }) => {
+          definirFormula(linha0, novoIdx, `${ref(origIdx)}`);
+        });
+        definirFormula(linha0, 6, `${ref(idxRawTotal)}`, { z: '0.000' }); // G: aux segundos (base)
+        definirFormula(linha0, 9, `${ref(idxRawUnidade)}`, { z: '0.000' }); // J: aux segundos por unidade (base)
+        definirFormula(linha0, 7, `ROUND(G${r}*${potExpr},0)`); // H: aux unidades (precisão aplicada)
+        definirFormula(linha0, 10, `ROUND(J${r}*${potExpr},0)`); // K: aux unidades por unidade (precisão aplicada)
+        definirFormula(linha0, 5, formulaConvertida('G', 'H', r)); // F: Tempo Cronometrado
+        definirFormula(linha0, 8, formulaConvertida('J', 'K', r)); // I: Tempo por Unidade
       });
 
-      worksheet['!cols'] = [
-        { wch: 18 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
-        { wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 24 }
-      ];
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Tempo (conversor)');
+      worksheet['!cols'] = new Array(ultimoIdxNovo + 1).fill({ wch: 16 });
+      [5, 8].forEach(c => { worksheet['!cols'][c] = { wch: 28 }; });
+      [6, 9].forEach(c => { worksheet['!cols'][c] = { wch: 14 }; });
+      [7, 10].forEach(c => { worksheet['!cols'][c] = { wch: 16 }; });
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Medições (convertido)');
     }
 
     async function gerarExcel(dados, nomeBase, nomeAba = "Medições", dadosAtividades = []) {
@@ -14057,7 +14117,7 @@
       workbook.Workbook = { CalcPr: { fullCalcOnLoad: true } };
       XLSX.utils.book_append_sheet(workbook, worksheet, nomeAba);
       if (dados[0] && Object.prototype.hasOwnProperty.call(dados[0], '_segTotal')) {
-        criarAbaConversorTempo(workbook, dados);
+        criarAbaMedicoesConvertidas(workbook, dados, nomeAba);
       }
       if (dadosAtividades.length > 0) {
         const worksheetAtividades = XLSX.utils.json_to_sheet(dadosAtividades);
