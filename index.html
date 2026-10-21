@@ -14101,12 +14101,86 @@
         definirFormula(linha0, 8, formulaConvertida('J', 'K', r)); // I: Tempo por Unidade
       });
 
+      // aoa_to_sheet só conhece as linhas de cabeçalho/seleção iniciais; sem atualizar o !ref aqui,
+      // as linhas de dados adicionadas célula a célula ficavam fora do intervalo e não eram gravadas.
+      const ultimaLinha0 = LINHA_DADOS_INICIO + dados.length - 1;
+      worksheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: ultimaLinha0, c: ultimoIdxNovo } });
+
       worksheet['!cols'] = new Array(ultimoIdxNovo + 1).fill({ wch: 16 });
       [5, 8].forEach(c => { worksheet['!cols'][c] = { wch: 28 }; });
       [6, 9].forEach(c => { worksheet['!cols'][c] = { wch: 14 }; });
       [7, 10].forEach(c => { worksheet['!cols'][c] = { wch: 16 }; });
 
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Medições (convertido)');
+    }
+
+    let promessaBibliotecaFflate = null;
+    function carregarScriptFflate(url) {
+      return new Promise((resolve, reject) => {
+        const existente = document.querySelector(`script[data-fflate-src="${url}"]`);
+        if (existente) {
+          if (window.fflate && window.fflate.unzipSync && window.fflate.zipSync) { resolve(); return; }
+          existente.addEventListener('load', resolve, { once: true });
+          existente.addEventListener('error', reject, { once: true });
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.crossOrigin = 'anonymous';
+        script.dataset.fflateSrc = url;
+        script.onload = resolve;
+        script.onerror = () => { script.remove(); reject(new Error('Falha ao carregar a biblioteca de compactação.')); };
+        document.head.appendChild(script);
+      });
+    }
+
+    async function obterBibliotecaFflate() {
+      if (window.fflate && window.fflate.unzipSync && window.fflate.zipSync) return window.fflate;
+      if (!promessaBibliotecaFflate) {
+        promessaBibliotecaFflate = (async () => {
+          const fontes = [
+            'https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/fflate.min.js',
+            'https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js',
+            'https://unpkg.com/fflate@0.8.2/umd/index.js'
+          ];
+          let ultimoErro = null;
+          for (const fonte of fontes) {
+            try {
+              await carregarScriptFflate(fonte);
+              if (window.fflate && window.fflate.unzipSync && window.fflate.zipSync) return window.fflate;
+            } catch (erro) { ultimoErro = erro; }
+          }
+          throw ultimoErro || new Error('A biblioteca de compactação não ficou disponível.');
+        })().catch(erro => { promessaBibliotecaFflate = null; throw erro; });
+      }
+      return promessaBibliotecaFflate;
+    }
+
+    // A biblioteca de Excel gratuita usada no site (SheetJS Community) não sabe ESCREVER validação
+    // de dados (lista suspensa) — é recurso só da versão paga. Para ter a lista suspensa de verdade
+    // mesmo assim, geramos o .xlsx normalmente e depois o abrimos como o .zip que ele é (com a
+    // fflate), editamos à mão o XML da aba "Medições (convertido)" para incluir as listas em B1/B3,
+    // e remontamos o arquivo. Se qualquer etapa falhar (ex.: sem internet para buscar a fflate),
+    // quem chamar esta função recebe null e a exportação cai de volta para o arquivo sem lista
+    // suspensa — a exportação em si nunca quebra por causa disso.
+    async function adicionarListasSuspensasExcel(workbook, nomeAbaConvertido, opcoesFormato, opcoesPrecisao) {
+      const indiceAba = workbook.SheetNames.indexOf(nomeAbaConvertido);
+      if (indiceAba === -1) return null;
+      const fflate = await obterBibliotecaFflate();
+      const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx', cellStyles: true });
+      const zip = fflate.unzipSync(new Uint8Array(bytes));
+      const caminhoSheet = `xl/worksheets/sheet${indiceAba + 1}.xml`;
+      const xmlOriginal = zip[caminhoSheet] ? fflate.strFromU8(zip[caminhoSheet]) : null;
+      if (!xmlOriginal || xmlOriginal.indexOf('</sheetData>') === -1) return null;
+
+      const listaXml = (celula, opcoes) =>
+        `<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="${celula}"><formula1>"${opcoes.join(',')}"</formula1></dataValidation>`;
+      const blocoValidacoes = `<dataValidations count="2">${listaXml('B1', opcoesFormato)}${listaXml('B3', opcoesPrecisao)}</dataValidations>`;
+      const xmlModificado = xmlOriginal.replace('</sheetData>', '</sheetData>' + blocoValidacoes);
+      zip[caminhoSheet] = fflate.strToU8(xmlModificado);
+
+      return fflate.zipSync(zip, { level: 6 });
     }
 
     async function gerarExcel(dados, nomeBase, nomeAba = "Medições", dadosAtividades = []) {
@@ -14116,14 +14190,33 @@
       const workbook = XLSX.utils.book_new();
       workbook.Workbook = { CalcPr: { fullCalcOnLoad: true } };
       XLSX.utils.book_append_sheet(workbook, worksheet, nomeAba);
-      if (dados[0] && Object.prototype.hasOwnProperty.call(dados[0], '_segTotal')) {
+      const temConversor = Boolean(dados[0] && Object.prototype.hasOwnProperty.call(dados[0], '_segTotal'));
+      if (temConversor) {
         criarAbaMedicoesConvertidas(workbook, dados, nomeAba);
       }
       if (dadosAtividades.length > 0) {
         const worksheetAtividades = XLSX.utils.json_to_sheet(dadosAtividades);
         XLSX.utils.book_append_sheet(workbook, worksheetAtividades, 'Descrição Atividades');
       }
-      XLSX.writeFile(workbook, `${nomeBase}_${Date.now()}.xlsx`, { cellStyles: true });
+      const nomeArquivo = `${nomeBase}_${Date.now()}.xlsx`;
+      if (temConversor) {
+        try {
+          const zipBytes = await adicionarListasSuspensasExcel(
+            workbook,
+            'Medições (convertido)',
+            ['Formato de tempo (HH:MM:SS)', 'Decimal (segundos)', 'Minutos'],
+            ['Segundo', 'Décimo de segundo', 'Centésimo de segundo', 'Milésimo de segundo (milissegundo)']
+          );
+          if (zipBytes) {
+            const blob = new Blob([zipBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            baixarBlobDocx(blob, nomeArquivo);
+            return;
+          }
+        } catch (erro) {
+          console.warn('Não foi possível adicionar listas suspensas nativas ao Excel; exportando sem elas.', erro);
+        }
+      }
+      XLSX.writeFile(workbook, nomeArquivo, { cellStyles: true });
     }
 
     async function exportarDadosFiltrados(tipo) {
