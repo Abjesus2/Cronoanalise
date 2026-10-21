@@ -10850,6 +10850,11 @@
         }
         linha['Anomalia'] = parsedObs.classif;
         linha['Observações'] = parsedObs.obs;
+        // Guardados como propriedades não-enumeráveis: não aparecem como coluna no CSV/Excel
+        // (Object.keys/JSON ignoram), mas ficam disponíveis para a aba "Tempo (conversor)" do
+        // Excel montar as fórmulas de conversão a partir do segundo com precisão total.
+        Object.defineProperty(linha, '_segTotal', { value: parseTimeToSecondsPrecise(c.Tempo_Total), enumerable: false });
+        Object.defineProperty(linha, '_segUnidade', { value: tempoUnidade.segundos, enumerable: false });
         return linha;
       });
     }
@@ -13985,12 +13990,75 @@
       const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' }); const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `${nomeBase}_${Date.now()}.csv`; link.click(); URL.revokeObjectURL(url);
     }
 
+    // Aba extra do Excel com um "conversor" de formato de tempo: a pessoa digita o formato
+    // desejado numa célula (Relogio, Decimal ou Minutos) e duas colunas com fórmula recalculam
+    // o tempo cronometrado e o tempo por unidade de TODAS as medições a partir do segundo com
+    // precisão total — sem precisar reexportar o arquivo para trocar de formato.
+    // Limitação da biblioteca gratuita usada aqui (SheetJS Community): não é possível criar uma
+    // lista suspensa nativa do Excel (recurso só da versão paga), por isso o formato é digitado
+    // numa célula, não escolhido num menu.
+    function criarAbaConversorTempo(workbook, dados) {
+      const linhasValidas = dados.filter(l => Number.isFinite(l._segTotal));
+      if (!linhasValidas.length) return;
+
+      const casas = obterConfiguracaoTempo(state.exportTimeMode).decimals;
+      const potencia = 10 ** casas;
+      const unidadesHora = 3600 * potencia;
+      const unidadesMinuto = 60 * potencia;
+      const zerosFracao = '0'.repeat(casas);
+      const formatoNumero = casas > 0 ? `0.${zerosFracao}` : '0';
+      const formatoPadrao = { clock: 'Relogio', decimal: 'Decimal', minutes: 'Minutos' }[obterFormatoTempoValido(state.exportTimeFormat)] || 'Decimal';
+
+      const LINHA_CABECALHO = 3; // 0-based (linha 4 na planilha)
+      const linhasBrutas = [
+        ['Formato de tempo (digite exatamente):', formatoPadrao, '', 'Valores aceitos: Relogio, Decimal ou Minutos'],
+        ['', '', '', 'As colunas G e H (auxiliares) servem só de apoio ao cálculo — não apague.'],
+        [],
+        ['Área', 'Setor', 'Atividade', 'Data/Hora', 'Tempo Cronometrado (s)', 'Tempo por Unidade (s)', 'Aux. Cronometrado', 'Aux. Unidade', 'Tempo Cronometrado (convertido)', 'Tempo por Unidade (convertido)']
+      ];
+      linhasValidas.forEach(l => {
+        const segUnidade = Number.isFinite(l._segUnidade) ? l._segUnidade : '';
+        linhasBrutas.push([l['Área'] || '', l['Setor'] || '', l['Atividade'] || '', l['Data/Hora'] || '', l._segTotal, segUnidade, '', '', '', '']);
+      });
+
+      const worksheet = XLSX.utils.aoa_to_sheet(linhasBrutas);
+
+      const formulaRelogio = (colAux, r) => {
+        const base = `TEXT(INT(${colAux}${r}/${unidadesHora}),"00")&":"&TEXT(MOD(INT(${colAux}${r}/${unidadesMinuto}),60),"00")&":"&TEXT(MOD(INT(${colAux}${r}/${potencia}),60),"00")`;
+        return casas > 0 ? `${base}&"."&TEXT(MOD(${colAux}${r},${potencia}),"${zerosFracao}")` : base;
+      };
+      const definirFormula = (linha0, coluna, formula) => {
+        worksheet[XLSX.utils.encode_cell({ r: linha0, c: coluna })] = { t: 'n', v: 0, f: formula };
+      };
+
+      linhasValidas.forEach((_, indice) => {
+        const linha0 = LINHA_CABECALHO + 1 + indice; // 0-based
+        const r = linha0 + 1; // número da linha no estilo usado pelas fórmulas (1-based)
+        definirFormula(linha0, 6, `ROUND(E${r}*${potencia},0)`); // G: aux cronometrado
+        definirFormula(linha0, 7, `ROUND(F${r}*${potencia},0)`); // H: aux unidade
+        definirFormula(linha0, 8, `IF(TRIM($B$1)="Relogio",${formulaRelogio('G', r)},IF(TRIM($B$1)="Minutos",ROUND(E${r}/60,${casas}),ROUND(E${r},${casas})))`);
+        definirFormula(linha0, 9, `IF(TRIM($B$1)="Relogio",${formulaRelogio('H', r)},IF(TRIM($B$1)="Minutos",ROUND(F${r}/60,${casas}),ROUND(F${r},${casas})))`);
+        [4, 5].forEach(coluna => { worksheet[XLSX.utils.encode_cell({ r: linha0, c: coluna })].z = '0.000'; });
+        [8, 9].forEach(coluna => { worksheet[XLSX.utils.encode_cell({ r: linha0, c: coluna })].z = formatoNumero; });
+      });
+
+      worksheet['!cols'] = [
+        { wch: 18 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
+        { wch: 12 }, { wch: 12 }, { wch: 24 }, { wch: 24 }
+      ];
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Tempo (conversor)');
+    }
+
     async function gerarExcel(dados, nomeBase, nomeAba = "Medições", dadosAtividades = []) {
       if (dados.length === 0) { await customAlert("Não há dados para exportar.", "Aviso"); return; }
       const worksheet = XLSX.utils.json_to_sheet(dados);
       aplicarFormatoPercentualNaPlanilha(worksheet);
       const workbook = XLSX.utils.book_new();
+      workbook.Workbook = { CalcPr: { fullCalcOnLoad: true } };
       XLSX.utils.book_append_sheet(workbook, worksheet, nomeAba);
+      if (dados[0] && Object.prototype.hasOwnProperty.call(dados[0], '_segTotal')) {
+        criarAbaConversorTempo(workbook, dados);
+      }
       if (dadosAtividades.length > 0) {
         const worksheetAtividades = XLSX.utils.json_to_sheet(dadosAtividades);
         XLSX.utils.book_append_sheet(workbook, worksheetAtividades, 'Descrição Atividades');
