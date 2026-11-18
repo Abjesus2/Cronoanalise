@@ -114,6 +114,18 @@ export async function exportarPlanilha(escopo = {}, nome = 'cronoanalise', { ana
   try {
     toast('Gerando planilha…', { tipo: 'info', duracao: 1500 });
     const XLSX = await obterXLSX();
+    const wb = montarPlanilhaCompleta(XLSX, escopo, { analises });
+    XLSX.writeFile(wb, nomeArquivo(nome) + '.xlsx', { compression: true });
+    toast('Planilha exportada');
+  } catch (e) {
+    console.error(e);
+    toast('Não foi possível gerar a planilha: ' + e.message, { tipo: 'erro' });
+  }
+}
+
+/** Monta o Excel completo (sem baixar) — usado também pelo consolidado da pasta compartilhada. */
+export function montarPlanilhaCompleta(XLSX, escopo = {}, { analises } = {}) {
+  {
     const ans = analises || analisesDoEscopo(escopo);
     const cfg = store.config();
     const wb = XLSX.utils.book_new();
@@ -151,11 +163,7 @@ export async function exportarPlanilha(escopo = {}, nome = 'cronoanalise', { ana
       { 'Parâmetro': 'Erro relativo (%)', 'Valor': cfg.erroRel * 100 },
       { 'Parâmetro': 'Exportado em', 'Valor': fmtDataHora(new Date().toISOString()) },
     ]), 'Parâmetros');
-    XLSX.writeFile(wb, nomeArquivo(nome) + '.xlsx', { compression: true });
-    toast('Planilha exportada');
-  } catch (e) {
-    console.error(e);
-    toast('Não foi possível gerar a planilha: ' + e.message, { tipo: 'erro' });
+    return wb;
   }
 }
 

@@ -1,4 +1,9 @@
-# Conectar a Cronoanálise ao SharePoint
+# Conectar a Cronoanálise ao SharePoint (direto, exige TI)
+
+> **Não tem acesso de administrador?** Use a **pasta compartilhada** (arquivos Excel numa pasta do
+> SharePoint sincronizada, do OneDrive ou da rede), que não precisa de TI:
+> veja **[PASTA-COMPARTILHADA.md](PASTA-COMPARTILHADA.md)**. Este documento é só para quem
+> conseguir registrar um aplicativo no Microsoft Entra ID.
 
 O site funciona sozinho no **modo local** (dados guardados só no navegador). Para a equipe toda
 compartilhar os mesmos dados, conecte-o a um site do **SharePoint Online**. Os dados ficam em

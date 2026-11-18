@@ -29,10 +29,10 @@ Para rodar localmente basta qualquer servidor estático na pasta (ex.: `python -
 | Modo | Onde ficam os dados | Quando usar |
 |---|---|---|
 | **Local** (padrão) | Só no navegador (IndexedDB) | Testes, uso individual |
-| **SharePoint** | Listas de um site do SharePoint Online, com login Microsoft | Uso em equipe |
+| **Pasta compartilhada** ⭐ | Arquivos **Excel** numa pasta do SharePoint sincronizada, do OneDrive ou da rede | Uso em equipe **sem precisar de TI** — veja **[PASTA-COMPARTILHADA.md](PASTA-COMPARTILHADA.md)** |
+| **SharePoint direto** | Listas de um site do SharePoint, via Microsoft Graph | Exige registro de aplicativo pela TI — veja [SHAREPOINT.md](SHAREPOINT.md) |
 
-Configuração do SharePoint: veja **[SHAREPOINT.md](SHAREPOINT.md)**.
-Em ambos os modos o sistema funciona **offline** e sincroniza quando a conexão volta.
+Em todos os modos o sistema funciona **offline** e sincroniza quando a pasta/conexão volta.
 
 ## Trazer os dados do sistema antigo
 

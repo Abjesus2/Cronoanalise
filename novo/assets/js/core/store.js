@@ -1,6 +1,9 @@
-// Estado central da aplicação: dados em memória + cache IndexedDB + sincronização SharePoint.
+// Estado central da aplicação: dados em memória + cache IndexedDB + sincronização
+// (pasta compartilhada com arquivos Excel, ou SharePoint via Microsoft Graph).
 import * as db from './db-local.js';
 import { sharepoint, SharePoint } from './sharepoint.js';
+import { pasta, nomeArquivoDispositivo, montarPlanilha, NOME_CONSOLIDADO } from './pasta.js';
+import { obterXLSX } from '../lib.js';
 import { CONFIG_PADRAO } from './calc.js';
 import { uid, agoraISO, ordenarPor, debounce } from './util.js';
 import { prefs } from './prefs.js';
@@ -36,14 +39,28 @@ class Store {
       precisaEntrar: false,
       listasFaltando: [],
       naoEnviados: 0,
+      pasta: { nome: '', permissao: null, arquivos: [], avisos: [], consolidadoEm: null },
     };
+    // modo pasta: o que ESTE computador gravou (vai para o arquivo dele) + exclusões
+    this.diario = Object.fromEntries(COLS.map(c => [c, {}]));
+    this.exclusoesDiario = {};
+    this.versaoDiario = 0;
+    this.diarioSujo = false;
+    this.dispositivoId = null;
+    this.arquivoProprio = '';
+    this.consolidadoAuto = true;
+    this.salvarDiario = debounce(() => {
+      db.metaGravar('diario', this.diario);
+      db.metaGravar('exclusoesDiario', this.exclusoesDiario);
+      db.metaGravar('diarioSujo', this.diarioSujo);
+    }, 1000);
     this.spIds = {};
     this.spMod = {};
     this.pendentes = new Set();
     this.historico = [];
     this.cadeia = Promise.resolve();
     this.carregado = false;
-    this.agendarSync = debounce(() => this.sincronizar(), 1500);
+    this.agendarSync = debounce(() => this.sincronizar(), 3000);
     this.salvarHistorico = debounce(() => db.metaGravar('historico', this.historico), 800);
   }
 
@@ -79,9 +96,20 @@ class Store {
       if (document.visibilityState === 'visible') this.sincronizar();
     }, 45000);
 
+    // modo pasta compartilhada
+    this.dispositivoId = await db.metaLer('dispositivoId', null);
+    this.arquivoProprio = (await db.metaLer('arquivoProprio', '')) || '';
+    this.consolidadoAuto = (await db.metaLer('consolidadoAuto', true)) !== false;
+    const diario = await db.metaLer('diario', null);
+    if (diario) for (const c of COLS) this.diario[c] = diario[c] || {};
+    this.exclusoesDiario = (await db.metaLer('exclusoesDiario', {})) || {};
+    this.diarioSujo = Boolean(await db.metaLer('diarioSujo', false));
+    const modo = await db.metaLer('modoArmazenamento', 'local');
+
     const cfg = this.configSharePoint();
-    // não bloqueia a primeira tela: os dados locais aparecem na hora e a nuvem sincroniza em seguida
-    if (cfg.clientId && cfg.siteUrl) this.ativarSharePoint(cfg);
+    // não bloqueia a primeira tela: os dados locais aparecem na hora e a sincronização vem em seguida
+    if (modo === 'pasta') this.iniciarPasta();
+    else if (cfg.clientId && cfg.siteUrl) this.ativarSharePoint(cfg);
   }
 
   assinar(fn) {
@@ -291,6 +319,21 @@ class Store {
   }
 
   persistir(col, salvos, excluidos) {
+    if (this.sync.modo === 'pasta') {
+      const agora = agoraISO();
+      for (const e of salvos) {
+        this.diario[col][e.id] = e;
+        delete this.exclusoesDiario[`${col}:${e.id}`];
+      }
+      for (const id of excluidos) {
+        delete this.diario[col][id];
+        this.exclusoesDiario[`${col}:${id}`] = agora;
+      }
+      this.versaoDiario++;
+      this.diarioSujo = true;
+      this.salvarDiario();
+      this.agendarSync();
+    }
     const modoSP = this.sync.modo === 'sharepoint';
     const entradas = [
       ...salvos.map(e => ({ col, id: e.id, op: 'salvar', ts: Date.now() })),
@@ -470,6 +513,7 @@ class Store {
   }
 
   sincronizar() {
+    if (this.sync.modo === 'pasta') return this.sincronizarPasta();
     if (this.sync.modo !== 'sharepoint') return Promise.resolve();
     if (this._sincronizando) return this._sincronizando;
     if (!navigator.onLine) {
@@ -665,6 +709,205 @@ class Store {
     return resumo;
   }
 
+  /* ------------------------------ pasta compartilhada (Excel) ------------------------------ */
+
+  nomesConsulta() {
+    return {
+      area: id => this.obter('areas', id)?.nome || '',
+      areaDoSetor: sid => this.obter('areas', this.obter('setores', sid)?.areaId)?.nome || '',
+      setor: id => this.obter('setores', id)?.nome || '',
+      atividade: id => this.obter('atividades', id),
+      codigo: a => this.codigo(a),
+      parada: id => this.obter('paradas', id)?.nome || '',
+    };
+  }
+
+  async iniciarPasta() {
+    this.sync.modo = 'pasta';
+    this.emitir();
+    await pasta.carregar();
+    this.sync.pasta.nome = pasta.nome;
+    this.sync.pasta.permissao = await pasta.permissao(false).catch(() => 'prompt');
+    this.emitir();
+    if (this.sync.pasta.permissao === 'granted') await this.sincronizarPasta();
+  }
+
+  /** Escolhe (ou recebe) a pasta e passa a trabalhar nela. */
+  async conectarPasta(handle = null, { incluirLocais = true } = {}) {
+    if (handle) await pasta.definir(handle);
+    else await pasta.escolher();
+    const p = await pasta.permissao(true);
+    if (p !== 'granted') throw new Error('O navegador não recebeu permissão para usar a pasta.');
+    if (!this.dispositivoId) {
+      this.dispositivoId = uid().replace(/-/g, '').slice(0, 8);
+      await db.metaGravar('dispositivoId', this.dispositivoId);
+    }
+    this.arquivoProprio = nomeArquivoDispositivo(this.autor() || 'Usuario', this.dispositivoId);
+    await db.metaGravar('arquivoProprio', this.arquivoProprio);
+    this.diario = Object.fromEntries(COLS.map(c => [c, {}]));
+    this.exclusoesDiario = {};
+    if (incluirLocais) for (const c of COLS) for (const e of this.dados[c].values()) this.diario[c][e.id] = e;
+    this.versaoDiario++;
+    this.diarioSujo = true;
+    this.salvarDiario();
+    this.sync.modo = 'pasta';
+    this.sync.erro = null;
+    this.sync.pasta.nome = pasta.nome;
+    this.sync.pasta.permissao = 'granted';
+    await db.metaGravar('modoArmazenamento', 'pasta');
+    this.emitir();
+    await this.sincronizarPasta({ forcarEscrita: true, removerAusentes: true });
+  }
+
+  /** Pede de novo a permissão da pasta (precisa ser chamado a partir de um clique). */
+  async reconectarPasta() {
+    const p = await pasta.permissao(true);
+    this.sync.pasta.permissao = p;
+    this.emitir();
+    if (p === 'granted') await this.sincronizarPasta();
+    return p;
+  }
+
+  async desconectarPasta() {
+    await pasta.esquecer();
+    this.sync.modo = 'local';
+    this.sync.erro = null;
+    this.sync.pasta = { nome: '', permissao: null, arquivos: [], avisos: [], consolidadoEm: null };
+    await db.metaGravar('modoArmazenamento', 'local');
+    this.emitir();
+  }
+
+  async definirConsolidadoAuto(valor) {
+    this.consolidadoAuto = Boolean(valor);
+    await db.metaGravar('consolidadoAuto', this.consolidadoAuto);
+    this.emitir();
+  }
+
+  async gravarArquivoProprio() {
+    const XLSX = await obterXLSX();
+    const versao = this.versaoDiario;
+    const wb = montarPlanilha(XLSX, {
+      diario: this.diario,
+      exclusoes: this.exclusoesDiario,
+      info: { dispositivo: this.dispositivoId, pessoa: this.autor() || '', atualizadoEm: agoraISO() },
+      nomes: this.nomesConsulta(),
+    });
+    await pasta.gravarPlanilha(this.arquivoProprio, wb);
+    if (this.versaoDiario === versao) {
+      this.diarioSujo = false;
+      db.metaGravar('diarioSujo', false);
+    }
+  }
+
+  /** Junta os arquivos de todos: vale a versão mais recente de cada registro; exclusões vencem versões anteriores. */
+  mesclarArquivos(arquivos, { removerAusentes = true } = {}) {
+    const mapas = Object.fromEntries(COLS.map(c => [c, new Map()]));
+    const tumbas = new Map();
+    const considerar = (col, e) => {
+      if (!mapas[col] || !e?.id) return;
+      const atual = mapas[col].get(e.id);
+      if (!atual || (e.modificadoEm || '') > (atual.modificadoEm || '')) mapas[col].set(e.id, e);
+    };
+    const tumba = (chave, ts) => {
+      if (!tumbas.has(chave) || ts > tumbas.get(chave)) tumbas.set(chave, ts);
+    };
+    for (const arq of arquivos) {
+      for (const [col, lista] of Object.entries(arq.registros || {})) for (const e of lista) considerar(col, e);
+      for (const t of arq.exclusoes || []) tumba(`${t.col}:${t.id}`, t.ts);
+    }
+    for (const c of COLS) for (const e of Object.values(this.diario[c] || {})) considerar(c, e);
+    for (const [k, ts] of Object.entries(this.exclusoesDiario)) tumba(k, ts);
+    for (const [k, ts] of tumbas) {
+      const i = k.indexOf(':');
+      const col = k.slice(0, i);
+      const id = k.slice(i + 1);
+      const e = mapas[col]?.get(id);
+      if (e && (e.modificadoEm || '') <= ts) mapas[col].delete(id);
+    }
+    let mudou = false;
+    for (const col of COLS) {
+      const atual = this.dados[col];
+      const novo = mapas[col];
+      const gravar = [];
+      const apagar = [];
+      for (const [id, e] of novo) {
+        const a = atual.get(id);
+        if (!a || a.modificadoEm !== e.modificadoEm) gravar.push(e);
+      }
+      for (const id of atual.keys()) {
+        if (novo.has(id)) continue;
+        if (removerAusentes || tumbas.has(`${col}:${id}`)) apagar.push(id);
+      }
+      if (gravar.length || apagar.length) {
+        mudou = true;
+        for (const e of gravar) atual.set(e.id, e);
+        for (const id of apagar) atual.delete(id);
+        this.tocar(col);
+        db.gravar(col, gravar);
+        db.apagar(col, apagar);
+      }
+    }
+    if (mudou) this.emitir();
+    return mudou;
+  }
+
+  sincronizarPasta({ forcarEscrita = false, removerAusentes } = {}) {
+    if (this._sincronizando) return this._sincronizando;
+    if (!pasta.handle) {
+      this.sync.pasta.permissao = 'sem-pasta';
+      this.emitir();
+      return Promise.resolve();
+    }
+    this._sincronizando = (async () => {
+      this.sync.sincronizando = true;
+      this.emitir();
+      try {
+        const p = await pasta.permissao(false);
+        this.sync.pasta.permissao = p;
+        if (p !== 'granted') return;
+        if (this.diarioSujo || forcarEscrita || !this.arquivoProprio) {
+          if (!this.arquivoProprio) {
+            this.arquivoProprio = nomeArquivoDispositivo(this.autor() || 'Usuario', this.dispositivoId || uid().slice(0, 8));
+            db.metaGravar('arquivoProprio', this.arquivoProprio);
+          }
+          await this.gravarArquivoProprio();
+        }
+        const { arquivos, erros } = await pasta.lerTodos();
+        // se algum arquivo não pôde ser lido, não remove nada que "sumiu" (evita apagar por engano)
+        this.mesclarArquivos(arquivos, { removerAusentes: removerAusentes ?? !erros.length });
+        this.sync.pasta.arquivos = arquivos.map(a => ({ nome: a.nome, modificado: a.modificado, proprio: a.nome === this.arquivoProprio })).sort((a, b) => b.modificado - a.modificado);
+        this.sync.pasta.avisos = erros;
+        this.sync.ultima = agoraISO();
+        this.sync.erro = null;
+        await db.metaGravar('ultimaSync', this.sync.ultima);
+        if (this.consolidadoAuto && this._versaoConsolidado !== this.versao && Date.now() - (this._ultimoConsolidado || 0) > 5 * 60_000) {
+          await this.gravarConsolidado().catch(e => this.sync.pasta.avisos.push('Consolidado: ' + e.message));
+        }
+      } catch (e) {
+        console.error('Sincronização da pasta', e);
+        this.sync.erro = e.message || String(e);
+        if (e.codigo === 'permissao') this.sync.pasta.permissao = 'prompt';
+      } finally {
+        this.sync.sincronizando = false;
+        this._sincronizando = null;
+        this.emitir();
+      }
+    })();
+    return this._sincronizando;
+  }
+
+  /** Grava "Cronoanalise - Consolidado.xlsx" na pasta: tudo junto, com a produtividade calculada. */
+  async gravarConsolidado() {
+    const XLSX = await obterXLSX();
+    const { montarPlanilhaCompleta } = await import('./exportar.js');
+    const wb = montarPlanilhaCompleta(XLSX, {});
+    await pasta.gravarPlanilha(NOME_CONSOLIDADO, wb);
+    this._versaoConsolidado = this.versao;
+    this._ultimoConsolidado = Date.now();
+    this.sync.pasta.consolidadoEm = agoraISO();
+    this.emitir();
+  }
+
   /** Grava itens preservando datas originais (importações). */
   importarItens(col, itens) {
     for (const i of itens) this.dados[col].set(i.id, { ...i });
@@ -680,6 +923,13 @@ class Store {
     this.spMod = {};
     this.historico = [];
     this.pendentes.clear();
+    this.diario = Object.fromEntries(COLS.map(c => [c, {}]));
+    this.exclusoesDiario = {};
+    this.diarioSujo = false;
+    if (this.sync.modo === 'pasta') {
+      this.sync.modo = 'local';
+      this.sync.pasta = { nome: '', permissao: null, arquivos: [], avisos: [], consolidadoEm: null };
+    }
     this.tocar();
     await this.recontarFila();
     this.emitir();

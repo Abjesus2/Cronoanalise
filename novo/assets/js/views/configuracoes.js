@@ -6,12 +6,13 @@ import { CONFIG_PADRAO, Z_CONFIANCA } from '../core/calc.js';
 import { prefs, definirPrefs } from '../core/prefs.js';
 import { FORMATOS, PRECISOES, fmtTempo } from '../core/time.js';
 import { fmtNum, fmtPct, numero, tempoRelativo, fmtDataHora, combina } from '../core/util.js';
-import { ic, toast, confirmar, ajuda, abrirDialogo, topoDialogo } from '../ui/ui.js';
+import { ic, toast, confirmar, ajuda, abrirDialogo, topoDialogo, pedirTexto } from '../ui/ui.js';
 import { cabecalho } from '../ui/layout.js';
 import { atualizar, ir } from '../ui/nav.js';
 import { baixarBackup, exportarPlanilha } from '../core/exportar.js';
 import { lerSistemaAntigo, importarDadosAntigos, importarPlanilhaAntiga, URL_SISTEMA_ANTIGO } from '../core/legado.js';
 import { obterXLSX } from '../lib.js';
+import { suportado as pastaSuportada, NOME_CONSOLIDADO, PREFIXO } from '../core/pasta.js';
 import { carregarExemplo, removerExemplo, temExemplo } from '../core/exemplo.js';
 
 const ui = { geral: null, sp: null, importando: false, urlAntigo: URL_SISTEMA_ANTIGO, termoHist: '' };
@@ -107,6 +108,103 @@ function abaPreferencias() {
 /* ------------------------------ banco de dados ------------------------------ */
 function abaDados() {
   const s = store.sync;
+  const p = s.pasta;
+  const naPasta = s.modo === 'pasta';
+  const temSuporte = pastaSuportada();
+  const conectar = async () => {
+    let incluirLocais = true;
+    const temDados = store.lista('atividades').length || store.lista('medicoes').length;
+    if (temDados) {
+      const escolha = await abrirDialogo(({ fechar }) => html`
+        ${topoDialogo({ icone: 'folder-simple-plus', titulo: 'Dados que já estão neste navegador', texto: `Este navegador já tem ${store.lista('atividades').length} atividade(s) e ${store.lista('medicoes').length} medição(ões)${temExemplo() ? ', incluindo os dados de exemplo' : ''}.` })}
+        <div class="dlg-corpo"><p>Deseja levar esses dados para a pasta compartilhada?</p>
+          ${temExemplo() ? html`<div class="aviso alerta">${ic('warning', 'fill')}<div>Dica: remova os dados de exemplo antes (Importar e exportar › Remover exemplo), para não enviá-los à equipe.</div></div>` : nothing}</div>
+        <div class="dlg-rodape">
+          <button class="btn" @click=${() => fechar(null)}>Cancelar</button>
+          <button class="btn" @click=${() => fechar('nao')}>Não, usar só o que está na pasta</button>
+          <button class="btn primario" @click=${() => fechar('sim')}>Sim, levar para a pasta</button>
+        </div>`, { classe: 'estreito' });
+      if (!escolha) return;
+      incluirLocais = escolha === 'sim';
+    }
+    if (!prefs().cronometrista) {
+      const nome = await pedirTexto({ titulo: 'Como você se chama?', texto: 'O nome identifica o seu arquivo na pasta e as medições que você fizer.', rotulo: 'Seu nome', placeholder: 'Ex.: Ana Souza', icone: 'user', confirmar: 'Continuar' });
+      if (!nome) return;
+      definirPrefs({ cronometrista: nome });
+    }
+    try {
+      await store.conectarPasta(null, { incluirLocais });
+      toast(`Conectado à pasta "${store.sync.pasta.nome}"`);
+    } catch (e) {
+      if (e.name !== 'AbortError') toast('Não foi possível usar a pasta: ' + e.message, { tipo: 'erro', duracao: 8000 });
+    }
+  };
+
+  return html`<div class="stack loose">
+    <section class="cartao stack">
+      <div class="row between wrap">
+        <h3 class="row">${ic('database', 'duo')} Onde os dados ficam</h3>
+        <span class="selo ${naPasta ? (s.erro || p.permissao !== 'granted' ? 'warning' : 'good') : s.modo === 'sharepoint' ? 'good' : 'warning'}">${ic(naPasta ? 'folder-simple' : s.modo === 'sharepoint' ? 'cloud-check' : 'hard-drives', 'fill')}${naPasta ? `Pasta: ${p.nome}` : s.modo === 'sharepoint' ? 'SharePoint' : 'Somente neste navegador'}</span>
+      </div>
+      ${!naPasta && s.modo !== 'sharepoint' ? html`<div class="aviso alerta">${ic('warning', 'fill')}<div><b>Os dados estão salvos apenas neste navegador.</b> Outras pessoas não veem as medições e, se o cache for limpo, elas se perdem. Use uma <b>pasta compartilhada</b> para trabalhar em equipe — não precisa de TI.</div></div>` : nothing}
+    </section>
+
+    <section class="cartao stack" style=${naPasta ? 'border-color:var(--good)' : ''}>
+      <div class="row between wrap">
+        <h3 class="row">${ic('folder-open', 'duo')} Pasta compartilhada — arquivos Excel</h3>
+        <span class="selo marca">${ic('star', 'fill')} recomendado · não precisa de TI</span>
+      </div>
+      <p class="small soft">O site grava os dados em arquivos <b>.xlsx</b> numa pasta que você escolhe: uma pasta do <b>SharePoint sincronizada</b> no computador, do <b>OneDrive</b> ou da <b>rede</b>. Cada pessoa grava o próprio arquivo (<code>Cronoanalise - Nome.xlsx</code>) e o site junta os de todos — ninguém sobrescreve o arquivo de outra pessoa. Também é mantido um <code>${NOME_CONSOLIDADO}</code> com tudo junto e a produtividade calculada.</p>
+
+      ${naPasta ? html`
+        ${p.permissao !== 'granted' ? html`<div class="aviso alerta">${ic('lock-key', 'fill')}<div class="grow">O navegador precisa da sua autorização para voltar a usar a pasta <b>${p.nome}</b>.
+          <div class="mt-s"><button class="btn primario pequeno" @click=${() => store.reconectarPasta().catch(e => toast(e.message, { tipo: 'erro' }))}>${ic('lock-key-open')} Reconectar pasta</button></div></div></div>` : nothing}
+        ${s.erro ? html`<div class="aviso erro">${ic('warning-circle', 'fill')}<div>${s.erro}</div></div>` : nothing}
+        ${p.avisos?.length ? html`<div class="aviso alerta">${ic('warning', 'fill')}<div>${p.avisos.map(a => html`<div>${a}</div>`)}</div></div>` : nothing}
+        <div class="grade g4">
+          <div class="estat"><span class="rotulo-estat">Pasta</span><span class="valor truncate" style="font-size:1rem">${p.nome}</span></div>
+          <div class="estat"><span class="rotulo-estat">Última sincronização</span><span class="valor" style="font-size:1rem">${tempoRelativo(s.ultima)}</span><span class="sub">${s.sincronizando ? 'sincronizando…' : 'a cada 45 s e após cada alteração'}</span></div>
+          <div class="estat"><span class="rotulo-estat">Seu arquivo</span><span class="valor truncate" style="font-size:.9rem" title=${store.arquivoProprio}>${store.arquivoProprio || '—'}</span><span class="sub">${store.diarioSujo ? 'alterações aguardando gravação' : 'em dia'}</span></div>
+          <div class="estat"><span class="rotulo-estat">Consolidado</span><span class="valor" style="font-size:1rem">${p.consolidadoEm ? tempoRelativo(p.consolidadoEm) : '—'}</span><span class="sub">${store.consolidadoAuto ? 'atualiza a cada 5 min' : 'atualização manual'}</span></div>
+        </div>
+        ${p.arquivos?.length ? html`<div class="stack tight"><span class="rotulo">Arquivos da equipe nesta pasta (${p.arquivos.length})</span>
+          <div class="lista">${p.arquivos.map(a => html`<div class="item" style="padding:8px 10px">
+            <span class="avatar" style="width:32px;height:32px;font-size:1rem">${ic('microsoft-excel-logo')}</span>
+            <span class="corpo"><b>${a.nome.replace(PREFIXO, '').replace(/\.xlsx$/i, '')}${a.proprio ? ' (este computador)' : ''}</b><span>atualizado ${tempoRelativo(new Date(a.modificado).toISOString())}</span></span>
+          </div>`)}</div></div>` : nothing}
+        <div class="row wrap">
+          <button class="btn primario" ?disabled=${s.sincronizando || p.permissao !== 'granted'} @click=${() => store.sincronizarPasta({ forcarEscrita: true })}>${ic('arrows-clockwise')} ${s.sincronizando ? 'Sincronizando…' : 'Sincronizar agora'}</button>
+          <button class="btn" ?disabled=${p.permissao !== 'granted'} @click=${async () => { try { await store.gravarConsolidado(); toast('Excel consolidado salvo na pasta'); } catch (e) { toast(e.message, { tipo: 'erro', duracao: 8000 }); } }}>${ic('microsoft-excel-logo')} Atualizar Excel consolidado</button>
+          <label class="row" style="gap:8px"><span class="alternador"><input type="checkbox" .checked=${store.consolidadoAuto} @change=${e => store.definirConsolidadoAuto(e.target.checked)} /><span></span></span><span class="small">Atualizar o consolidado automaticamente</span></label>
+        </div>
+        <div class="row wrap">
+          <button class="btn fantasma" @click=${conectar}>${ic('folder-open')} Trocar de pasta</button>
+          <button class="btn fantasma perigo" @click=${async () => { if (await confirmar({ titulo: 'Desconectar da pasta?', mensagem: 'O site volta a guardar os dados só neste navegador. Nenhum arquivo é apagado da pasta.', confirmar: 'Desconectar' })) store.desconectarPasta(); }}>${ic('plugs')} Desconectar</button>
+        </div>`
+      : temSuporte ? html`
+        <ol class="small soft" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
+          <li><b>SharePoint:</b> abra a biblioteca de documentos do site da equipe no navegador e clique em <b>Sincronizar</b> (ou <b>Adicionar atalho a Meus arquivos</b>). Ela aparece no Explorador de Arquivos, dentro de "${'AREZZO…'}" / OneDrive. Crie uma pasta, por exemplo <b>Cronoanalise-Dados</b>.</li>
+          <li><b>Rede:</b> use uma pasta compartilhada do servidor (ex.: <code>\\\\servidor\\Processos\\Cronoanalise</code>). Se não aparecer, mapeie como unidade (ex.: <b>Z:</b>).</li>
+          <li>Clique em <b>Escolher pasta</b> abaixo e autorize. <b>Todos da equipe escolhem a mesma pasta.</b></li>
+        </ol>
+        <div class="row wrap"><button class="btn primario grande" @click=${conectar}>${ic('folder-open')} Escolher pasta</button></div>
+        <p class="tiny muted">Funciona no Google Chrome e no Microsoft Edge do computador. Ao abrir o site em outro dia, pode ser preciso clicar em "Reconectar pasta" (o navegador pede a autorização de novo).</p>`
+      : html`<div class="aviso info">${ic('device-mobile', 'fill')}<div>Este navegador não permite escolher pastas (celulares e alguns navegadores). Use o <b>Chrome ou o Edge no computador</b> para conectar a pasta.
+          No celular, cronometre normalmente e depois use <b>Importar e exportar › Baixar backup</b>; no computador conectado à pasta, use <b>Restaurar backup › Mesclar</b>.</div></div>`}
+    </section>
+
+    <details class="cartao" ?open=${s.modo === 'sharepoint'}>
+      <summary class="row" style="cursor:pointer"><h3 class="row">${ic('cloud', 'duo')} SharePoint direto pela internet (exige TI)</h3></summary>
+      <div class="stack mt">
+        <p class="small soft">Alternativa que não depende de pasta sincronizada, mas exige registrar um aplicativo no Microsoft Entra ID (feito pela TI). Veja o SHAREPOINT.md.</p>
+        ${abaSharePoint()}
+      </div>
+    </details>
+  </div>`;
+}
+
+function abaSharePoint() {
+  const s = store.sync;
   const cfgSP = store.configSharePoint();
   if (!ui.sp) ui.sp = { ...cfgSP };
   const sp = ui.sp;
@@ -115,12 +213,7 @@ function abaDados() {
   const copiar = texto => navigator.clipboard?.writeText(texto).then(() => toast('Copiado'));
 
   return html`<div class="stack loose">
-    <section class="cartao stack">
-      <div class="row between wrap">
-        <h3 class="row">${ic('database', 'duo')} Onde os dados ficam</h3>
-        <span class="selo ${conectado ? (s.erro ? 'critical' : 'good') : 'warning'}">${ic(conectado ? 'cloud-check' : 'hard-drives', 'fill')}${conectado ? 'SharePoint' : 'Somente neste navegador'}</span>
-      </div>
-      ${conectado ? html`
+      ${conectado ? html`<section class="cartao stack">
         <div class="grade g4">
           <div class="estat"><span class="rotulo-estat">Usuário</span><span class="valor" style="font-size:1rem">${s.usuario?.nome || 'Não conectado'}</span><span class="sub">${s.usuario?.email || ''}</span></div>
           <div class="estat"><span class="rotulo-estat">Última sincronização</span><span class="valor" style="font-size:1rem">${tempoRelativo(s.ultima)}</span><span class="sub">${fmtDataHora(s.ultima)}</span></div>
@@ -140,9 +233,8 @@ function abaDados() {
             : html`<button class="btn primario" @click=${() => store.entrar().catch(e => toast(e.message, { tipo: 'erro' }))}>${ic('microsoft-outlook-logo')} Entrar com a conta Microsoft</button>`}
           <button class="btn fantasma" @click=${async () => { if (await confirmar({ titulo: 'Recarregar tudo do SharePoint?', mensagem: 'Apaga o cache deste navegador e baixa os dados novamente. Alterações pendentes serão perdidas.', confirmar: 'Recarregar' })) store.recarregarDoSharePoint(); }}>${ic('cloud-arrow-down')} Recarregar do SharePoint</button>
           ${!fixoNoArquivo ? html`<button class="btn fantasma perigo" @click=${async () => { if (await confirmar({ titulo: 'Desconectar do SharePoint?', mensagem: 'O sistema volta a guardar dados só neste navegador. Nada é apagado no SharePoint.', confirmar: 'Desconectar' })) { await store.desativarSharePoint(); ui.sp = null; } }}>${ic('plugs')} Desconectar</button>` : nothing}
-        </div>`
-      : html`<div class="aviso alerta">${ic('warning', 'fill')}<div><b>Os dados estão salvos apenas neste navegador.</b> Outras pessoas não veem as medições e, se o cache do navegador for limpo, elas se perdem. Conecte ao SharePoint para trabalhar em equipe — ou faça backups.</div></div>`}
-    </section>
+        </div></section>`
+      : nothing}
 
     ${!conectado || !fixoNoArquivo ? html`<section class="cartao stack">
       <h3 class="row">${ic('microsoft-teams-logo', 'duo')} Conectar ao SharePoint</h3>

@@ -59,6 +59,13 @@ function marcaSVG() {
 /* ------------------------------ sincronização ------------------------------ */
 function estadoSync() {
   const s = store.sync;
+  if (s.modo === 'pasta') {
+    const p = s.pasta;
+    if (p.permissao && p.permissao !== 'granted') return { classe: 'alerta', titulo: 'Reconectar pasta', texto: `Autorize o uso de "${p.nome}"` };
+    if (s.sincronizando) return { classe: 'ok pulsa', titulo: 'Sincronizando…', texto: `Pasta ${p.nome}` };
+    if (s.erro) return { classe: 'erro', titulo: 'Falha ao salvar na pasta', texto: s.erro };
+    return { classe: 'ok', titulo: `Pasta: ${p.nome}`, texto: `Sincronizado ${tempoRelativo(s.ultima)}` };
+  }
   if (s.modo !== 'sharepoint') return { classe: 'alerta', titulo: 'Modo local', texto: 'Dados só neste navegador' };
   if (!s.online) return { classe: 'alerta', titulo: 'Offline', texto: s.pendentes ? `${s.pendentes} alteração(ões) aguardando` : 'Trabalhando sem internet' };
   if (s.precisaEntrar) return { classe: 'alerta', titulo: 'Entre na conta', texto: 'Login Microsoft necessário' };
@@ -79,7 +86,7 @@ const COMANDOS = [
   { rotulo: 'Fluxograma', icone: 'flow-arrow', acao: () => ir('#/fluxograma') },
   { rotulo: 'Todas as medições', icone: 'list-numbers', acao: () => ir('#/medicoes') },
   { rotulo: 'Importar do sistema antigo', icone: 'download-simple', acao: () => ir('#/configuracoes/dados') },
-  { rotulo: 'Conectar ao SharePoint', icone: 'database', acao: () => ir('#/configuracoes/banco') },
+  { rotulo: 'Pasta compartilhada / banco de dados', icone: 'folder-open', acao: () => ir('#/configuracoes/banco') },
   { rotulo: 'Alternar tema claro/escuro', icone: 'moon', acao: () => definirPrefs({ tema: temaEfetivo() === 'dark' ? 'claro' : 'escuro' }) },
   { rotulo: 'Alternar modo simples/avançado', icone: 'sliders-horizontal', acao: () => definirPrefs({ modo: prefs().modo === 'simples' ? 'avancado' : 'simples' }) },
   { rotulo: 'Guia da metodologia', icone: 'book-open', acao: () => ir('#/guia') },
@@ -196,6 +203,19 @@ function barraInferior(chave) {
 
 function avisoLogin() {
   const s = store.sync;
+  if (s.modo === 'pasta') {
+    const p = s.pasta;
+    if (p.permissao && p.permissao !== 'granted') {
+      return html`<div class="aviso alerta nao-imprimir" style="margin:12px 0">${ic('folder-lock', 'fill')}
+        <div class="grow">Para salvar na pasta compartilhada <b>${p.nome}</b>, autorize o navegador (é pedido de novo a cada vez que o site é aberto). Enquanto isso, tudo fica guardado neste computador.</div>
+        <button class="btn pequeno primario" @click=${() => store.reconectarPasta().catch(e => toast(e.message, { tipo: 'erro' }))}>Reconectar pasta</button></div>`;
+    }
+    if (s.erro) {
+      return html`<div class="aviso erro nao-imprimir" style="margin:12px 0">${ic('warning-circle', 'fill')}<div class="grow">${s.erro}</div>
+        <button class="btn pequeno" @click=${() => store.sincronizar()}>Tentar de novo</button></div>`;
+    }
+    return nothing;
+  }
   if (s.modo !== 'sharepoint' || !s.precisaEntrar || !s.online) return nothing;
   return html`<div class="aviso alerta nao-imprimir" style="margin:12px 0">${ic('sign-in', 'fill')}
     <div class="grow">Entre com a sua conta Microsoft para sincronizar com o SharePoint. Enquanto isso, tudo que você registrar fica guardado neste aparelho.</div>
