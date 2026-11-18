@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f2ec">
+  <meta name="description" content="Cronoanálise: cronometragem, tempo padrão e produtividade individual e agrupada por atividade, setor e área.">
+  <title>Cronoanálise</title>
+  <link rel="icon" href="assets/img/icone.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/img/icone-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@500;600;700;800&family=Red+Hat+Mono:wght@500;600&family=Red+Hat+Text:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/fill/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/duotone/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/bold/style.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <script>
+    // Aplica o tema salvo antes de desenhar a página (evita "piscar" no modo escuro).
+    try {
+      var p = JSON.parse(localStorage.getItem('crono.v2.prefs') || '{}');
+      if (p.tema === 'escuro') document.documentElement.setAttribute('data-theme', 'dark');
+      if (p.tema === 'claro') document.documentElement.setAttribute('data-theme', 'light');
+    } catch (e) {}
+  </script>
+  <script src="config.js"></script>
+  <script type="module" src="assets/js/main.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div class="splash" role="status" aria-live="polite">
+      <div style="display:grid;place-items:center;gap:14px">
+        <span class="marca-icone" style="background:#15171c;color:#f4f2ec;display:grid;place-items:center">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="18" r="11" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="13" y="3" width="6" height="3" rx="1.2" fill="currentColor"/><line x1="16" y1="18" x2="16" y2="10.5" stroke="#ff6a2b" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="18" r="2" fill="#ff6a2b"/></svg>
+        </span>
+        <span>Carregando a cronoanálise…</span>
+      </div>
+    </div>
+  </div>
+  <noscript><p style="padding:24px;font-family:system-ui">Ative o JavaScript para usar o sistema de cronoanálise.</p></noscript>
+</body>
+</html>
