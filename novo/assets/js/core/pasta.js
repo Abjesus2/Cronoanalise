@@ -18,7 +18,7 @@ export const NOME_CONSOLIDADO = 'Cronoanalise - Consolidado.xlsx';
 const LIMITE_CELULA = 30000; // Excel aceita até 32.767 caracteres por célula
 
 export const ABAS = {
-  areas: 'Áreas',
+  areas: 'Operações',
   setores: 'Setores',
   atividades: 'Atividades',
   medicoes: 'Medições',
@@ -26,6 +26,8 @@ export const ABAS = {
   fluxos: 'Fluxogramas',
   config: 'Configuração',
 };
+
+const ABAS_ANTIGAS = { areas: 'Áreas' };
 
 export const suportado = () => typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
@@ -69,14 +71,14 @@ export function montarPlanilha(XLSX, { diario, exclusoes, info, nomes }) {
   const wb = XLSX.utils.book_new();
   const legiveis = {
     areas: e => ({ 'Nome': e.nome, 'Sequência': e.seq ?? '', 'Descrição': e.descricao || '' }),
-    setores: e => ({ 'Área': nomes.area(e.areaId), 'Nome': e.nome, 'Sequência': e.seq ?? '' }),
-    atividades: e => ({ 'Área': nomes.areaDoSetor(e.setorId), 'Setor': nomes.setor(e.setorId), 'Código': nomes.codigo(e), 'Nome': e.nome, 'Unidade': e.unidade || '', 'Pessoas alocadas': e.pessoas ?? 1 }),
+    setores: e => ({ 'Operação': nomes.area(e.areaId), 'Nome': e.nome, 'Sequência': e.seq ?? '' }),
+    atividades: e => ({ 'Operação': nomes.areaDoSetor(e.setorId), 'Setor': nomes.setor(e.setorId), 'Código': nomes.codigo(e), 'Nome': e.nome, 'Unidade': e.unidade || '', 'Pessoas alocadas': e.pessoas ?? 1 }),
     medicoes: e => {
       const at = nomes.atividade(e.atividadeId);
       const params = (at?.parametros || []).map(p => (e.valores?.[p.id] !== undefined && e.valores?.[p.id] !== '' ? `${p.nome}: ${e.valores[p.id]}` : null)).filter(Boolean).join(' · ');
       return {
         'Data e hora': e.dataHora ? new Date(e.dataHora) : '',
-        'Área': at ? nomes.areaDoSetor(at.setorId) : '',
+        'Operação': at ? nomes.areaDoSetor(at.setorId) : '',
         'Setor': at ? nomes.setor(at.setorId) : '',
         'Atividade': at?.nome || '',
         'Tempo (s)': Number.isFinite(e.tempo) ? Math.round(e.tempo * 1000) / 1000 : '',
@@ -130,7 +132,8 @@ export function lerPlanilha(XLSX, buffer) {
   const wb = XLSX.read(buffer, { type: 'array', cellDates: false });
   const registros = {};
   for (const [col, aba] of Object.entries(ABAS)) {
-    const ws = wb.Sheets[aba];
+    // arquivos gravados antes da troca de nome (Área → Operação) têm a aba "Áreas"
+    const ws = wb.Sheets[aba] || wb.Sheets[ABAS_ANTIGAS[col]];
     if (!ws) continue;
     registros[col] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true }).map(juntarJSON).filter(e => e && e.id);
   }

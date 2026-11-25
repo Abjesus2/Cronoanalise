@@ -1,4 +1,4 @@
-// Estrutura: Áreas → Setores → Atividades (com métricas agregadas).
+// Estrutura: Operações → Setores → Atividades (com métricas agregadas).
 import { html, nothing } from '../lib.js';
 import { store } from '../core/store.js';
 import { analise, grupo } from '../core/consultas.js';
@@ -42,7 +42,7 @@ function arvore(atual) {
     atualizar();
   };
   return html`<nav class="arvore" aria-label="Árvore da estrutura">
-    <a class="no ${!atual.area && !atual.setor ? 'ativo' : ''}" href="#/estrutura">${ic('buildings')}<span>Todas as áreas</span></a>
+    <a class="no ${!atual.area && !atual.setor ? 'ativo' : ''}" href="#/estrutura">${ic('buildings')}<span>Todas as operações</span></a>
     ${store.areas().map(a => html`
       <a class="no ${atual.area?.id === a.id ? 'ativo' : ''}" href="#/estrutura/area/${a.id}">
         <button class="seta ${ui.abertos.has(a.id) ? 'aberta' : ''}" aria-label="Expandir" @click=${e => alternar(e, a.id)}>${ic('caret-right', 'bold')}</button>
@@ -141,15 +141,15 @@ function telaAreas() {
           </article>`;
         })}
         <button class="cartao clicavel" style="border-style:dashed;display:grid;place-items:center;min-height:180px;background:transparent;color:var(--ink-2);font-weight:650" @click=${() => formArea()}>
-          <span class="stack tight" style="align-items:center">${ic('plus-circle', 'duo')}<span>Nova área</span></span>
+          <span class="stack tight" style="align-items:center">${ic('plus-circle', 'duo')}<span>Nova operação</span></span>
         </button>
       </div>`
     : html`<section class="cartao">${vazio({
         icone: 'buildings',
-        titulo: 'Comece pela primeira área',
-        texto: 'A estrutura organiza o trabalho em Áreas → Setores → Atividades. Cada nível mostra a produtividade agrupada.',
+        titulo: 'Comece pela primeira operação',
+        texto: 'A estrutura organiza o trabalho em Operações → Setores → Atividades. Cada nível mostra a produtividade agrupada.',
         acao: html`<div class="row wrap" style="justify-content:center">
-          <button class="btn primario" @click=${() => formArea()}>${ic('plus')} Criar área</button>
+          <button class="btn primario" @click=${() => formArea()}>${ic('plus')} Criar operação</button>
           <button class="btn" @click=${() => carregarExemplo()}>${ic('sparkle')} Carregar exemplo</button></div>`,
       })}</section>`;
 
@@ -160,10 +160,10 @@ function telaAreas() {
       ${cabecalho({
         sobre: 'Estrutura',
         icone: 'tree-structure',
-        titulo: 'Áreas',
-        texto: 'Organize o trabalho e veja a produtividade agrupada de cada área.',
+        titulo: 'Operações',
+        texto: 'Organize o trabalho e veja a produtividade agrupada de cada operação.',
         acoes: html`<button class="btn" @click=${() => exportarPlanilha({}, 'estrutura-completa')}>${ic('microsoft-excel-logo')} Exportar tudo</button>
-          <button class="btn primario" @click=${() => formArea()}>${ic('plus')} Nova área</button>`,
+          <button class="btn primario" @click=${() => formArea()}>${ic('plus')} Nova operação</button>`,
       })}
       <div class="explorador">${arvore({})}<div class="stack">${conteudo}</div></div>`,
   };
@@ -171,16 +171,16 @@ function telaAreas() {
 
 function acoesArea(a) {
   menuAcoes(a.nome, [
-    { icone: 'pencil-simple', rotulo: 'Editar área', acao: () => formArea(a) },
-    { icone: 'plus', rotulo: 'Novo setor nesta área', acao: () => formSetor(null, a.id) },
+    { icone: 'pencil-simple', rotulo: 'Editar operação', acao: () => formArea(a) },
+    { icone: 'plus', rotulo: 'Novo setor nesta operação', acao: () => formSetor(null, a.id) },
     { icone: 'microsoft-excel-logo', rotulo: 'Exportar para Excel', acao: () => exportarPlanilha({ areaId: a.id }, a.nome) },
-    { icone: 'trash', rotulo: 'Excluir área', perigo: true, texto: 'Exclui setores, atividades e medições', acao: () => excluirComConfirmacao('areas', [a.id], { aoConcluir: () => ir('#/estrutura') }) },
+    { icone: 'trash', rotulo: 'Excluir operação', perigo: true, texto: 'Exclui setores, atividades e medições', acao: () => excluirComConfirmacao('areas', [a.id], { aoConcluir: () => ir('#/estrutura') }) },
   ]);
 }
 
 function acoesSetor(s) {
   menuAcoes(s.nome, [
-    { icone: 'pencil-simple', rotulo: 'Editar setor', texto: 'Nome, área e sequência', acao: () => formSetor(s) },
+    { icone: 'pencil-simple', rotulo: 'Editar setor', texto: 'Nome, operação e sequência', acao: () => formSetor(s) },
     { icone: 'plus', rotulo: 'Nova atividade neste setor', acao: () => formAtividade(null, s.id) },
     { icone: 'microsoft-excel-logo', rotulo: 'Exportar para Excel', acao: () => exportarPlanilha({ setorId: s.id }, s.nome) },
     { icone: 'trash', rotulo: 'Excluir setor', perigo: true, texto: 'Exclui atividades e medições', acao: () => excluirComConfirmacao('setores', [s.id], { aoConcluir: () => ir(`#/estrutura/area/${s.areaId}`) }) },
@@ -243,7 +243,7 @@ function telaArea(id) {
     migalhas: [{ rotulo: 'Estrutura', href: '#/estrutura' }, { rotulo: area.nome }],
     conteudo: html`
       ${cabecalho({
-        sobre: 'Área',
+        sobre: 'Operação',
         icone: 'buildings',
         titulo: area.nome,
         texto: area.descricao || `${setores.length} setor(es) · ${gr.nAtividades} atividade(s) · ${gr.medicoes} medições`,
@@ -280,7 +280,7 @@ function telaArea(id) {
                 <span class="stack tight" style="align-items:center">${ic('plus-circle', 'duo')}<span>Novo setor</span></span>
               </button>
             </div>`
-          : html`<section class="cartao">${vazio({ icone: 'squares-four', titulo: 'Nenhum setor nesta área', texto: 'Setores reúnem atividades em sequência (ex.: Corte → Costura → Montagem).', acao: html`<button class="btn primario" @click=${() => formSetor(null, id)}>${ic('plus')} Criar setor</button>` })}</section>`}
+          : html`<section class="cartao">${vazio({ icone: 'squares-four', titulo: 'Nenhum setor nesta operação', texto: 'Setores reúnem atividades em sequência (ex.: Corte → Costura → Montagem).', acao: html`<button class="btn primario" @click=${() => formSetor(null, id)}>${ic('plus')} Criar setor</button>` })}</section>`}
         </div>
       </div>`,
   };
@@ -318,7 +318,7 @@ function telaSetor(id) {
 
   return {
     titulo: setor.nome,
-    migalhas: [{ rotulo: 'Estrutura', href: '#/estrutura' }, { rotulo: area?.nome || 'Área', href: `#/estrutura/area/${setor.areaId}` }, { rotulo: setor.nome }],
+    migalhas: [{ rotulo: 'Estrutura', href: '#/estrutura' }, { rotulo: area?.nome || 'Operação', href: `#/estrutura/area/${setor.areaId}` }, { rotulo: setor.nome }],
     conteudo: html`
       ${cabecalho({
         sobre: area?.nome || 'Setor',

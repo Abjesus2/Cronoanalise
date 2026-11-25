@@ -79,9 +79,9 @@ const COMANDOS = [
   { rotulo: 'Cronometrar', icone: 'timer', acao: () => ir('#/cronometro') },
   { rotulo: 'Nova atividade', icone: 'cube', acao: () => formAtividade() },
   { rotulo: 'Novo setor', icone: 'squares-four', acao: () => formSetor() },
-  { rotulo: 'Nova área', icone: 'buildings', acao: () => formArea() },
+  { rotulo: 'Nova operação', icone: 'buildings', acao: () => formArea() },
   { rotulo: 'Produtividade por atividade', icone: 'chart-line-up', acao: () => ir('#/produtividade/atividades') },
-  { rotulo: 'Produtividade por setor e área', icone: 'tree-structure', acao: () => ir('#/produtividade/agrupado') },
+  { rotulo: 'Produtividade por setor e operação', icone: 'tree-structure', acao: () => ir('#/produtividade/agrupado') },
   { rotulo: 'Planejar equipe', icone: 'users-three', acao: () => ir('#/produtividade/planejamento') },
   { rotulo: 'Fluxograma', icone: 'flow-arrow', acao: () => ir('#/fluxograma') },
   { rotulo: 'Todas as medições', icone: 'list-numbers', acao: () => ir('#/medicoes') },
@@ -92,7 +92,7 @@ const COMANDOS = [
   { rotulo: 'Guia da metodologia', icone: 'book-open', acao: () => ir('#/guia') },
 ];
 const ICONE_TIPO = { area: 'buildings', setor: 'squares-four', atividade: 'cube', operador: 'user' };
-const ROTULO_TIPO = { area: 'Área', setor: 'Setor', atividade: 'Atividade', operador: 'Operador' };
+const ROTULO_TIPO = { area: 'Operação', setor: 'Setor', atividade: 'Atividade', operador: 'Operador' };
 
 let paletaAberta = false;
 function abrirPaleta() {
@@ -112,7 +112,7 @@ function abrirPaleta() {
       item.acao();
     };
     return html`<div class="paleta-busca">${ic('magnifying-glass')}
-        <input autofocus placeholder="Buscar atividade, setor, área, operador ou comando…" .value=${termo} aria-label="Buscar"
+        <input autofocus placeholder="Buscar atividade, setor, operação, operador ou comando…" .value=${termo} aria-label="Buscar"
           @input=${e => { termo = e.target.value; ativo = 0; att(); }}
           @keydown=${e => {
             if (e.key === 'ArrowDown') { e.preventDefault(); ativo = Math.min(tudo.length - 1, ativo + 1); att(); }

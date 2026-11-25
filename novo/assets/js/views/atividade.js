@@ -519,7 +519,7 @@ export function telaAtividade(rota) {
         sobre: [c.area?.nome, c.setor?.nome].filter(Boolean).join(' › ') || 'Atividade',
         icone: 'cube',
         titulo: a.nome,
-        extra: html`<div class="row wrap"><span class="selo contorno mono" data-dica="Classificação área.setor.atividade">${store.codigo(store.obter('atividades', id))}</span>${seloSaude(an.saude)}
+        extra: html`<div class="row wrap"><span class="selo contorno mono" data-dica="Classificação operação.setor.atividade">${store.codigo(store.obter('atividades', id))}</span>${seloSaude(an.saude)}
           <span class="selo contorno">${ic('stack')} ${a.unidade}</span>
           ${a.maquina ? html`<span class="selo contorno">${ic('gear-six')} ${a.maquina}</span>` : nothing}
           ${a.exemplo ? html`<span class="selo marca">exemplo</span>` : nothing}</div>`,

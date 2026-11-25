@@ -467,7 +467,7 @@ export function analisarAtividade(atividadeBruta, medicoes, ctx) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Agrupamentos (setor, área, empresa)                                 */
+/* Agrupamentos (setor, operação, empresa)                                 */
 /* ------------------------------------------------------------------ */
 
 export function analisarGrupo(analises, config) {

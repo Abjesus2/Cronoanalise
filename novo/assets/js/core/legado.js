@@ -108,7 +108,7 @@ export function importarDadosAntigos(d) {
   const atividadePorIdAntigo = new Map();
   for (const an of lista(d.analises)) {
     if (!an.ID_Analise) continue;
-    const area = areaPorNome(an.Area || 'Sem área');
+    const area = areaPorNome(an.Area || 'Sem operação');
     const setor = setorPorNome(area.id, an.Setor || 'Sem setor');
     if (an.Sequencia_Area && area.seq == null) area.seq = numero(an.Sequencia_Area);
     if (an.Sequencia_Setor && setor.seq == null) setor.seq = numero(an.Sequencia_Setor);

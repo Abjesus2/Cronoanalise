@@ -325,7 +325,7 @@ export function escolherAtividade(store, { titulo = 'Escolha a atividade', exclu
       <div class="dlg-corpo" style="padding-top:8px">
         <div class="busca-local" style="max-width:none">
           ${ic('magnifying-glass')}
-          <input class="entrada" placeholder="Buscar por área, setor ou atividade" autofocus .value=${termo} @input=${e => { termo = e.target.value; atualizar(); }} />
+          <input class="entrada" placeholder="Buscar por operação, setor ou atividade" autofocus .value=${termo} @input=${e => { termo = e.target.value; atualizar(); }} />
         </div>
         <div class="lista" style="max-height:52dvh;overflow:auto">
           ${grupos.length ? grupos.map(g => html`
@@ -338,7 +338,7 @@ export function escolherAtividade(store, { titulo = 'Escolha a atividade', exclu
               <span class="corpo"><b>${a.nome}</b><span>${store.medicoes(a.id).length} medições</span></span>
               ${ic('caret-right')}
             </button>`)}`)
-          : vazio({ icone: 'magnifying-glass', titulo: 'Nada encontrado', texto: 'Cadastre áreas, setores e atividades em Estrutura.' })}
+          : vazio({ icone: 'magnifying-glass', titulo: 'Nada encontrado', texto: 'Cadastre operações, setores e atividades em Estrutura.' })}
         </div>
       </div>`;
   });

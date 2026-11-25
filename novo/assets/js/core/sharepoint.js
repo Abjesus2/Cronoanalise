@@ -9,7 +9,7 @@ const ESCOPOS_DADOS = ['User.Read', 'Sites.ReadWrite.All'];
 const ESCOPOS_CRIAR = ['Sites.Manage.All'];
 
 export const LISTAS = {
-  areas: { nome: 'Crono_Areas', titulo: 'Áreas' },
+  areas: { nome: 'Crono_Areas', titulo: 'Operações' },
   setores: { nome: 'Crono_Setores', titulo: 'Setores' },
   atividades: { nome: 'Crono_Atividades', titulo: 'Atividades' },
   medicoes: {

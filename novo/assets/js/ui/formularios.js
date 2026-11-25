@@ -36,13 +36,13 @@ export function formArea(area = null) {
       ev.preventDefault();
       if (!e.nome.trim()) return;
       const salvo = store.salvar('areas', { ...(area || {}), nome: e.nome.trim(), seq: numero(e.seq), descricao: e.descricao.trim() });
-      toast(area ? 'Área atualizada' : 'Área criada');
+      toast(area ? 'Operação atualizada' : 'Operação criada');
       fechar(salvo);
     }}>
-      ${topoDialogo({ icone: 'buildings', titulo: area ? 'Editar área' : 'Nova área', texto: 'Áreas agrupam setores (ex.: Produção, Expedição, Corte).' })}
+      ${topoDialogo({ icone: 'buildings', titulo: area ? 'Editar operação' : 'Nova operação', texto: 'Operações agrupam setores (ex.: Controladora, Web, Logística reversa).' })}
       <div class="dlg-corpo">
         <div class="grade-form">
-          <div class="campo cheio"><label for="fa-nome">Nome da área</label>
+          <div class="campo cheio"><label for="fa-nome">Nome da operação</label>
             <input id="fa-nome" class="entrada" required autofocus .value=${e.nome} @input=${ev => (e.nome = ev.target.value)} placeholder="Ex.: Produção" /></div>
           <div class="campo"><label for="fa-seq">Sequência</label>
             <input id="fa-seq" class="entrada" type="number" min="1" .value=${String(e.seq ?? '')} @input=${ev => (e.seq = ev.target.value)} />
@@ -72,12 +72,12 @@ export function formSetor(setor = null, areaId = null) {
       toast(setor ? 'Setor atualizado' : 'Setor criado');
       fechar(salvo);
     }}>
-      ${topoDialogo({ icone: 'squares-four', titulo: setor ? 'Editar setor' : 'Novo setor', texto: 'Setores ficam dentro de uma área e reúnem as atividades.' })}
+      ${topoDialogo({ icone: 'squares-four', titulo: setor ? 'Editar setor' : 'Novo setor', texto: 'Setores ficam dentro de uma operação e reúnem as atividades.' })}
       <div class="dlg-corpo">
         ${store.areas().length ? html`<div class="grade-form">
           <div class="campo cheio"><label for="fs-nome">Nome do setor</label>
             <input id="fs-nome" class="entrada" required autofocus .value=${e.nome} @input=${ev => (e.nome = ev.target.value)} placeholder="Ex.: Costura" /></div>
-          <div class="campo"><label for="fs-area">Área</label>
+          <div class="campo"><label for="fs-area">Operação</label>
             <select id="fs-area" class="entrada" .value=${e.areaId} @change=${ev => {
               e.areaId = ev.target.value;
               if (!setor) e.seq = store.proximaSequencia('setores', e.areaId);
@@ -87,7 +87,7 @@ export function formSetor(setor = null, areaId = null) {
             <input id="fs-seq" class="entrada" type="number" min="1" .value=${String(e.seq ?? '')} @input=${ev => (e.seq = ev.target.value)} /></div>
           <div class="campo cheio"><label for="fs-desc">Descrição (opcional)</label>
             <textarea id="fs-desc" class="entrada" .value=${e.descricao} @input=${ev => (e.descricao = ev.target.value)}></textarea></div>
-        </div>` : html`<div class="aviso alerta">${ic('warning', 'fill')}<div>Crie uma área primeiro.</div></div>`}
+        </div>` : html`<div class="aviso alerta">${ic('warning', 'fill')}<div>Crie uma operação primeiro.</div></div>`}
       </div>
       ${rodape(fechar)}
     </form>`);
@@ -195,7 +195,7 @@ export function formAtividade(atividade = null, setorId = null) {
         ${avancado ? html`<div class="campo"><label for="fat-maq">Máquina / equipamento</label>
           <input id="fat-maq" class="entrada" .value=${e.maquina} @input=${ev => (e.maquina = ev.target.value)} /></div>` : nothing}
         ${!atividade ? html`<div class="aviso info">${ic('info', 'fill')}<div>Ritmo, tolerâncias, paradas e parâmetros extras podem ser ajustados depois na aba <b>Método &amp; cálculo</b> da atividade.</div></div>` : nothing}
-        ` : html`<div class="aviso alerta">${ic('warning', 'fill')}<div>Crie uma área e um setor antes de cadastrar atividades.</div></div>`}
+        ` : html`<div class="aviso alerta">${ic('warning', 'fill')}<div>Crie uma operação e um setor antes de cadastrar atividades.</div></div>`}
       </div>
       ${rodape(fechar)}
     </form>`, { classe: 'largo' });
@@ -380,7 +380,7 @@ export function formParada(parada = null, tipo = 'programada') {
 }
 
 /* ------------------------------ Ações ------------------------------ */
-const NOMES = { areas: ['área', 'áreas'], setores: ['setor', 'setores'], atividades: ['atividade', 'atividades'], medicoes: ['medição', 'medições'], paradas: ['cadastro', 'cadastros'] };
+const NOMES = { areas: ['operação', 'operações'], setores: ['setor', 'setores'], atividades: ['atividade', 'atividades'], medicoes: ['medição', 'medições'], paradas: ['cadastro', 'cadastros'] };
 
 export async function excluirComConfirmacao(col, ids, { aoConcluir } = {}) {
   if (!ids.length) return false;

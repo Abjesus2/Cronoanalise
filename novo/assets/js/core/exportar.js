@@ -13,7 +13,7 @@ const r1 = v => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 function linhaProdutividade(an) {
   const c = store.caminho(store.obter('atividades', an.atividade.id));
   return {
-    'Área': c.area?.nome || '',
+    'Operação': c.area?.nome || '',
     'Setor': c.setor?.nome || '',
     'Atividade': an.atividade.nome,
     'Unidade': an.atividade.unidade,
@@ -80,7 +80,7 @@ function linhasMedicoes(medicoes) {
     const l = an?.linhas.find(x => x.m.id === m.id);
     const linha = {
       'Data e hora': m.dataHora ? new Date(m.dataHora) : '',
-      'Área': c.area?.nome || '',
+      'Operação': c.area?.nome || '',
       'Setor': c.setor?.nome || '',
       'Atividade': at?.nome || '(atividade removida)',
       'Tempo (s)': r3(m.tempo),
@@ -109,7 +109,7 @@ function folha(XLSX, linhas) {
   return ws;
 }
 
-/** Exporta um Excel completo do escopo: produtividade, setores, áreas, medições e paradas. */
+/** Exporta um Excel completo do escopo: produtividade, setores, operações, medições e paradas. */
 export async function exportarPlanilha(escopo = {}, nome = 'cronoanalise', { analises } = {}) {
   try {
     toast('Gerando planilha…', { tipo: 'info', duracao: 1500 });
@@ -135,13 +135,13 @@ export function montarPlanilhaCompleta(XLSX, escopo = {}, { analises } = {}) {
     const setores = [...porSetor.entries()].map(([id, lista]) => {
       const s = store.obter('setores', id);
       const area = s ? store.obter('areas', s.areaId) : null;
-      return linhaGrupo(s?.nome || '', { 'Área': area?.nome || '' }, analisarGrupo(lista, cfg), lista.find(a => a.tempoPadrao)?.atividade.unidade || '');
+      return linhaGrupo(s?.nome || '', { 'Operação': area?.nome || '' }, analisarGrupo(lista, cfg), lista.find(a => a.tempoPadrao)?.atividade.unidade || '');
     });
     XLSX.utils.book_append_sheet(wb, folha(XLSX, setores), 'Setores');
 
     const porArea = agruparPor(ans, a => store.obter('setores', a.atividade.setorId)?.areaId);
     const areas = [...porArea.entries()].map(([id, lista]) => linhaGrupo(store.obter('areas', id)?.nome || '', {}, analisarGrupo(lista, cfg), lista.find(a => a.tempoPadrao)?.atividade.unidade || ''));
-    XLSX.utils.book_append_sheet(wb, folha(XLSX, areas), 'Áreas');
+    XLSX.utils.book_append_sheet(wb, folha(XLSX, areas), 'Operações');
 
     const meds = ans.flatMap(a => store.medicoes(a.atividade.id));
     XLSX.utils.book_append_sheet(wb, folha(XLSX, linhasMedicoes(meds)), 'Medições');

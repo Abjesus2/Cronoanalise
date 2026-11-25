@@ -304,7 +304,7 @@ function telaEscolha() {
       ${store.atividades().length ? html`<div class="dividido">
         <section class="cartao stack">
           <div class="busca-local" style="max-width:none">${ic('magnifying-glass')}
-            <input class="entrada" type="search" autofocus placeholder="Buscar atividade, setor ou área…" .value=${c.termo} @input=${e => { c.termo = e.target.value; atualizar(); }} /></div>
+            <input class="entrada" type="search" autofocus placeholder="Buscar atividade, setor ou operação…" .value=${c.termo} @input=${e => { c.termo = e.target.value; atualizar(); }} /></div>
           <div class="lista">
             ${grupos.map(g => html`<div class="paleta-grupo">${g.area.nome} › ${g.setor.nome}</div>
               ${g.ats.map(a => {

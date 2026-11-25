@@ -286,7 +286,7 @@ function abaImportar() {
   return html`<div class="grade g2">
     <section class="cartao stack">
       <h3 class="row">${ic('clock-counter-clockwise', 'duo')} Trazer dados do sistema antigo</h3>
-      <p class="small soft">Importa áreas, setores, atividades, parâmetros, paradas e todas as medições da planilha Google usada pelo site atual. Pode repetir quantas vezes quiser: os registros são atualizados, não duplicados.</p>
+      <p class="small soft">Importa operações, setores, atividades, parâmetros, paradas e todas as medições da planilha Google usada pelo site atual. Pode repetir quantas vezes quiser: os registros são atualizados, não duplicados.</p>
       <div class="campo"><label>Endereço do Apps Script</label><input class="entrada mono" .value=${ui.urlAntigo} @input=${e => (ui.urlAntigo = e.target.value.trim())} /></div>
       <div class="row wrap">
         <button class="btn primario" ?disabled=${ui.importando} @click=${async () => {
@@ -331,7 +331,7 @@ function abaImportar() {
         <label class="btn">${ic('upload-simple')} Restaurar backup<input type="file" accept=".json,application/json" hidden @change=${restaurar} /></label>
       </div>
       <h3 class="row mt">${ic('microsoft-excel-logo', 'duo')} Excel</h3>
-      <p class="small soft">Planilha com produtividade por atividade, setores, áreas, medições, paradas e parâmetros.</p>
+      <p class="small soft">Planilha com produtividade por atividade, setores, operações, medições, paradas e parâmetros.</p>
       <button class="btn" style="align-self:flex-start" @click=${() => exportarPlanilha({}, 'cronoanalise-completa')}>${ic('microsoft-excel-logo')} Exportar tudo para Excel</button>
     </section>
     <section class="cartao stack">
@@ -361,7 +361,7 @@ function mostrarResumoImportacao(r) {
   abrirDialogo(({ fechar }) => html`${topoDialogo({ icone: 'check-circle', titulo: 'Importação concluída', texto: 'Os dados do sistema antigo foram trazidos.' })}
     <div class="dlg-corpo">
       <div class="grade g4">
-        <div class="estat"><span class="rotulo-estat">Áreas</span><span class="valor">${r.areas}</span></div>
+        <div class="estat"><span class="rotulo-estat">Operações</span><span class="valor">${r.areas}</span></div>
         <div class="estat"><span class="rotulo-estat">Setores</span><span class="valor">${r.setores}</span></div>
         <div class="estat"><span class="rotulo-estat">Atividades</span><span class="valor">${r.atividades}</span></div>
         <div class="estat"><span class="rotulo-estat">Medições</span><span class="valor">${r.medicoes}</span></div>

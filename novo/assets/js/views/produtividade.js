@@ -49,8 +49,8 @@ function barraFiltros(f) {
   const setores = f.areaId ? store.setores(f.areaId) : store.setores();
   return html`<div class="ferramentas cartao plano" style="padding:12px;gap:10px">
     ${ic('funnel-simple')}
-    <select class="entrada" style="width:auto;max-width:220px" aria-label="Área" @change=${e => definirQuery({ area: e.target.value, setor: '' })}>
-      <option value="">Todas as áreas</option>${store.areas().map(a => html`<option value=${a.id} ?selected=${a.id === f.areaId}>${a.nome}</option>`)}
+    <select class="entrada" style="width:auto;max-width:220px" aria-label="Operação" @change=${e => definirQuery({ area: e.target.value, setor: '' })}>
+      <option value="">Todas as operações</option>${store.areas().map(a => html`<option value=${a.id} ?selected=${a.id === f.areaId}>${a.nome}</option>`)}
     </select>
     <select class="entrada" style="width:auto;max-width:220px" aria-label="Setor" @change=${e => definirQuery({ setor: e.target.value })}>
       <option value="">Todos os setores</option>${setores.map(s => html`<option value=${s.id} ?selected=${s.id === f.setorId}>${s.nome}</option>`)}
@@ -176,7 +176,7 @@ function abaAtividades(ans) {
     <div class="row between wrap">${seletorUnidade()}<span class="small muted">${ans.length} atividade(s)</span></div>
     ${ans.length ? html`<div class="tabela-wrap">
       <table class="tabela">
-        <thead><tr>${th('nome', 'Atividade')}${th('setor', 'Área › Setor')}${th('med', 'Medições', true)}${th('tp', 'Tempo padrão', true)}
+        <thead><tr>${th('nome', 'Atividade')}${th('setor', 'Operação › Setor')}${th('med', 'Medições', true)}${th('tp', 'Tempo padrão', true)}
           ${th('ritmo', 'Ritmo', true)}${th('tol', 'Tolerância', true)}${th('cv', 'CV', true)}${th('prod', `Produtividade ${ROTULO_PERIODO[ui.periodo]}`, true)}<th class="n">Pessoas</th>${th('conf', 'Situação')}</tr></thead>
         <tbody>${ord.map(({ an, area, setor }) => html`<tr class="clicavel" @click=${() => ir(`#/atividade/${an.atividade.id}`)}>
           <td><b>${an.atividade.nome}</b></td>
@@ -204,7 +204,7 @@ function abaAgrupado(ans) {
   const areas = [...porArea.entries()].map(([id, ss]) => ({ item: store.obter('areas', id), g: analisarGrupo(ss.flatMap(s => s.lista), cfg), lista: ss.flatMap(s => s.lista) })).filter(x => x.item);
   const unidadeDe = lista => lista.find(a => a.tempoPadrao)?.atividade.unidade || 'un.';
   const tabela = (linhas, tipo) => html`<div class="tabela-wrap"><table class="tabela">
-    <thead><tr><th>${tipo === 'setor' ? 'Setor' : 'Área'}</th><th class="n">Atividades</th><th class="n">Medições</th>
+    <thead><tr><th>${tipo === 'setor' ? 'Setor' : 'Operação'}</th><th class="n">Atividades</th><th class="n">Medições</th>
       <th class="n">TP total ${ajuda('tpTotal')}</th><th>Gargalo</th><th class="n">Capacidade do fluxo ${ajuda('capacidadeFluxo')}</th>
       <th class="n">Por pessoa ${ajuda('tpTotal')}</th><th class="n">Pessoas</th><th class="n">Balanceamento ${ajuda('balanceamento')}</th><th class="n">Confiáveis</th></tr></thead>
     <tbody>${ordenarPor(linhas, l => l.item.seq ?? 999, l => l.item.nome).map(({ item, g, lista }) => {
@@ -224,9 +224,9 @@ function abaAgrupado(ans) {
     })}</tbody></table></div>`;
   return html`<div class="stack loose">
     <div class="row between wrap">${seletorUnidade()}</div>
-    <div class="aviso info">${ic('info', 'fill')}<div>O agrupamento considera que as atividades de um setor/área formam uma sequência (linha) para o mesmo produto. A <b>capacidade do fluxo</b> é limitada pelo gargalo; a <b>produtividade por pessoa</b> é quanto 1 pessoa produziria fazendo todas as etapas.</div></div>
+    <div class="aviso info">${ic('info', 'fill')}<div>O agrupamento considera que as atividades de um setor/operação formam uma sequência (linha) para o mesmo produto. A <b>capacidade do fluxo</b> é limitada pelo gargalo; a <b>produtividade por pessoa</b> é quanto 1 pessoa produziria fazendo todas as etapas.</div></div>
     <section class="stack"><h2 class="row">${ic('squares-four', 'duo')} Por setor</h2>${setores.length ? tabela(setores, 'setor') : html`<p class="muted">Sem dados.</p>`}</section>
-    <section class="stack"><h2 class="row">${ic('buildings', 'duo')} Por área</h2>${areas.length ? tabela(areas, 'area') : html`<p class="muted">Sem dados.</p>`}</section>
+    <section class="stack"><h2 class="row">${ic('buildings', 'duo')} Por operação</h2>${areas.length ? tabela(areas, 'area') : html`<p class="muted">Sem dados.</p>`}</section>
   </div>`;
 }
 
@@ -383,7 +383,7 @@ export function telaProdutividade(rota) {
   const abas = [
     ['visao', 'Visão geral', 'squares-four'],
     ['atividades', 'Por atividade', 'cube'],
-    ['agrupado', 'Por setor e área', 'tree-structure'],
+    ['agrupado', 'Por setor e operação', 'tree-structure'],
     ['operadores', 'Por operador', 'user-focus'],
     ['planejamento', 'Planejamento', 'calculator'],
   ];
@@ -394,7 +394,7 @@ export function telaProdutividade(rota) {
     operadores: () => abaOperadores(ans, f),
     planejamento: () => abaPlanejamento(ans, f),
   }[aba] || (() => abaVisao(ans, f));
-  const escopoNome = f.setorId ? store.obter('setores', f.setorId)?.nome : f.areaId ? store.obter('areas', f.areaId)?.nome : 'Todas as áreas';
+  const escopoNome = f.setorId ? store.obter('setores', f.setorId)?.nome : f.areaId ? store.obter('areas', f.areaId)?.nome : 'Todas as operações';
   return {
     titulo: 'Produtividade',
     migalhas: [{ rotulo: 'Produtividade' }],

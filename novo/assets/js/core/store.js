@@ -11,7 +11,7 @@ import { prefs } from './prefs.js';
 const COLS = db.COLECOES;
 export const PAI = { setores: 'areaId', atividades: 'setorId', medicoes: 'atividadeId' };
 const ROTULO_COL = {
-  areas: ['área', 'áreas'],
+  areas: ['operação', 'operações'],
   setores: ['setor', 'setores'],
   atividades: ['atividade', 'atividades'],
   medicoes: ['medição', 'medições'],
@@ -208,7 +208,7 @@ class Store {
     return { area, setor, atividade };
   }
 
-  /** Código de classificação no formato área.setor.atividade (ex.: 1.4.2). */
+  /** Código de classificação no formato operação.setor.atividade (ex.: 1.4.2). */
   codigo(atividade) {
     if (!atividade) return '';
     const c = this.caminho(atividade);
@@ -288,7 +288,7 @@ class Store {
     return existentes.length;
   }
 
-  /** Exclui com todos os descendentes (área → setores → atividades → medições). */
+  /** Exclui com todos os descendentes (operação → setores → atividades → medições). */
   excluirCascata(col, ids) {
     const alvo = { areas: new Set(), setores: new Set(), atividades: new Set(), medicoes: new Set() };
     ids.forEach(id => alvo[col].add(id));

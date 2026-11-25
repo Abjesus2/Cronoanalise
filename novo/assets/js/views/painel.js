@@ -33,7 +33,7 @@ function mostrador() {
 
 function primeirosPassos() {
   const passos = [
-    { feito: store.areas().length > 0, titulo: 'Crie uma área', texto: 'Ex.: Produção, Expedição.', acao: () => formArea() },
+    { feito: store.areas().length > 0, titulo: 'Crie uma operação', texto: 'Ex.: Controladora, Web.', acao: () => formArea() },
     { feito: store.setores().length > 0, titulo: 'Crie um setor', texto: 'Ex.: Corte, Costura.', acao: () => formSetor() },
     { feito: store.atividades().length > 0, titulo: 'Cadastre a atividade', texto: 'A operação que será medida.', acao: () => formAtividade() },
     { feito: store.lista('medicoes').length >= 5, titulo: 'Cronometre', texto: 'Faça ao menos 5 medições.', acao: () => ir('#/cronometro') },
@@ -110,7 +110,7 @@ export function telaPainel() {
 
         <section class="atalhos" style="--i:2">
           <a class="atalho" href="#/cronometro"><span class="ic laranja">${ic('timer', 'duo')}</span><div><b>Cronometrar</b><span>Medir uma atividade</span></div></a>
-          <a class="atalho" href="#/estrutura"><span class="ic azul">${ic('tree-structure', 'duo')}</span><div><b>Estrutura</b><span>Áreas, setores e atividades</span></div></a>
+          <a class="atalho" href="#/estrutura"><span class="ic azul">${ic('tree-structure', 'duo')}</span><div><b>Estrutura</b><span>Operações, setores e atividades</span></div></a>
           <a class="atalho" href="#/produtividade/planejamento"><span class="ic verde">${ic('users-three', 'duo')}</span><div><b>Planejar equipe</b><span>Pessoas por demanda</span></div></a>
           <a class="atalho" href="#/fluxograma"><span class="ic violeta">${ic('flow-arrow', 'duo')}</span><div><b>Fluxograma</b><span>Visualizar o processo</span></div></a>
         </section>
@@ -142,8 +142,8 @@ export function telaPainel() {
 
         <div class="grade g2" style="--i:4">
           <section class="cartao">
-            <div class="cartao-topo"><h3>${ic('chart-bar-horizontal', 'duo')} Cobertura por área</h3><span class="small muted">atividades com tempo padrão</span></div>
-            ${barrasH(areasCobertura, { max: 1, vazioTexto: 'Cadastre áreas para acompanhar a cobertura.' })}
+            <div class="cartao-topo"><h3>${ic('chart-bar-horizontal', 'duo')} Cobertura por operação</h3><span class="small muted">atividades com tempo padrão</span></div>
+            ${barrasH(areasCobertura, { max: 1, vazioTexto: 'Cadastre operações para acompanhar a cobertura.' })}
           </section>
           <section class="cartao">
             <div class="cartao-topo"><h3>${ic('list-bullets', 'duo')} Últimas alterações</h3><a class="btn fantasma pequeno" href="#/configuracoes/historico">Histórico ${ic('arrow-right')}</a></div>

@@ -17,7 +17,7 @@ const CORES = {
   nota: { fill: '#fffbe0', stroke: '#e6dc9a', texto: '#4d4520', sub: '#6d6436' },
 };
 const TAM = { area: [220, 74], setor: [220, 74], atividade: [230, 84], etapa: [200, 70], decisao: [170, 110], nota: [200, 90] };
-const ROTULO_TIPO = { area: 'Área', setor: 'Setor', atividade: 'Atividade', etapa: 'Etapa', decisao: 'Decisão', nota: 'Nota' };
+const ROTULO_TIPO = { area: 'Operação', setor: 'Setor', atividade: 'Atividade', etapa: 'Etapa', decisao: 'Decisão', nota: 'Nota' };
 
 const f = {
   versaoId: 'oficial',
@@ -483,15 +483,15 @@ export function telaFluxograma(rota) {
         sobre: 'Processo',
         icone: 'flow-arrow',
         titulo: 'Fluxograma',
-        texto: 'Gerado automaticamente a partir da estrutura: Área → Setores → Atividades, com tempos e gargalos. Crie versões editáveis para propor melhorias.',
+        texto: 'Gerado automaticamente a partir da estrutura: Operação → Setores → Atividades, com tempos e gargalos. Crie versões editáveis para propor melhorias.',
         acoes: html`
           <label class="btn">${ic('upload-simple')} Importar<input type="file" accept=".json,application/json" hidden @change=${e => importarJSON(e, areaId, setorId)} /></label>
           <button class="btn" ?disabled=${!v.nos.length} @click=${() => exportar(v)}>${ic('export')} Exportar</button>
           <button class="btn primario" ?disabled=${!v.nos.length} @click=${() => criarVersao(v, areaId, setorId)}>${ic('git-branch')} Nova versão editável</button>`,
       })}
       <div class="ferramentas">
-        <select class="entrada" style="width:auto;max-width:220px" aria-label="Área" @change=${e => definirQuery({ area: e.target.value, setor: '' })}>
-          <option value="">Todas as áreas</option>${store.areas().map(a => html`<option value=${a.id} ?selected=${a.id === areaId}>${a.nome}</option>`)}</select>
+        <select class="entrada" style="width:auto;max-width:220px" aria-label="Operação" @change=${e => definirQuery({ area: e.target.value, setor: '' })}>
+          <option value="">Todas as operações</option>${store.areas().map(a => html`<option value=${a.id} ?selected=${a.id === areaId}>${a.nome}</option>`)}</select>
         <select class="entrada" style="width:auto;max-width:220px" aria-label="Setor" @change=${e => definirQuery({ setor: e.target.value })}>
           <option value="">Todos os setores</option>${(areaId ? store.setores(areaId) : store.setores()).map(s => html`<option value=${s.id} ?selected=${s.id === setorId}>${s.nome}</option>`)}</select>
         <select class="entrada" style="width:auto;max-width:260px" aria-label="Versão" @change=${e => { f.versaoId = e.target.value; f.rascunho = null; f.pilha = []; f.refazer = []; f.sel = null; f.conectar = null; f.ajustar = true; atualizar(); }}>
@@ -507,7 +507,7 @@ export function telaFluxograma(rota) {
           @keydown=${e => { if ((e.key === 'Delete' || e.key === 'Backspace') && editavel) excluirSelecionado(); }} tabindex="0" aria-label="Área do fluxograma: arraste para mover, role para aproximar">
           ${svgFluxo(v, editavel)}
           <div class="fluxo-legenda">
-            <span><i style="background:${CORES.area.fill}"></i>Área</span><span><i style="background:${CORES.setor.fill}"></i>Setor</span>
+            <span><i style="background:${CORES.area.fill}"></i>Operação</span><span><i style="background:${CORES.setor.fill}"></i>Setor</span>
             <span><i style="background:#fff;border:1px solid #cfc9b9"></i>Atividade</span><span><i style="background:#eb6834"></i>Gargalo</span>
           </div>
           <div class="fluxo-controles" @pointerdown=${e => e.stopPropagation()}>
@@ -518,6 +518,6 @@ export function telaFluxograma(rota) {
           </div>
         </div>
         <aside class="cartao" style="position:sticky;top:calc(var(--topbar) + 10px)">${detalhes(v)}</aside>
-      </div>` : html`<section class="cartao">${vazio({ icone: 'flow-arrow', titulo: 'Nada para desenhar', texto: 'Cadastre áreas, setores e atividades na Estrutura.', acao: html`<a class="btn primario" href="#/estrutura">Ir para a estrutura</a>` })}</section>`}`,
+      </div>` : html`<section class="cartao">${vazio({ icone: 'flow-arrow', titulo: 'Nada para desenhar', texto: 'Cadastre operações, setores e atividades na Estrutura.', acao: html`<a class="btn primario" href="#/estrutura">Ir para a estrutura</a>` })}</section>`}`,
   };
 }

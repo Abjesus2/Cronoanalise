@@ -58,8 +58,8 @@ export function telaMedicoes(rota) {
       })}
       <div class="ferramentas cartao plano" style="padding:12px">
         ${ic('funnel-simple')}
-        <select class="entrada" style="width:auto;max-width:200px" aria-label="Área" @change=${e => definirQuery({ area: e.target.value, setor: '', atividade: '' })}>
-          <option value="">Todas as áreas</option>${store.areas().map(a => html`<option value=${a.id} ?selected=${q.area === a.id}>${a.nome}</option>`)}</select>
+        <select class="entrada" style="width:auto;max-width:200px" aria-label="Operação" @change=${e => definirQuery({ area: e.target.value, setor: '', atividade: '' })}>
+          <option value="">Todas as operações</option>${store.areas().map(a => html`<option value=${a.id} ?selected=${q.area === a.id}>${a.nome}</option>`)}</select>
         <select class="entrada" style="width:auto;max-width:200px" aria-label="Setor" @change=${e => definirQuery({ setor: e.target.value, atividade: '' })}>
           <option value="">Todos os setores</option>${setores.map(s => html`<option value=${s.id} ?selected=${q.setor === s.id}>${s.nome}</option>`)}</select>
         <select class="entrada" style="width:auto;max-width:220px" aria-label="Atividade" @change=${e => definirQuery({ atividade: e.target.value })}>

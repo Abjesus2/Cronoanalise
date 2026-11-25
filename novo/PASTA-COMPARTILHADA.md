@@ -39,7 +39,7 @@ Cronoanalise-Dados/
   junta: em cada registro vale a alteração mais recente; exclusões são respeitadas.
   Assim ninguém sobrescreve o arquivo de outra pessoa e o OneDrive não cria cópias de conflito.
 - O **Consolidado** é atualizado automaticamente (no máximo a cada 5 minutos) ou pelo botão
-  *Atualizar Excel consolidado*. Ele tem as abas Produtividade, Setores, Áreas, Medições,
+  *Atualizar Excel consolidado*. Ele tem as abas Produtividade, Setores, Operações, Medições,
   Paradas e Parâmetros — use-o para relatórios, Power BI etc.
 - **Não edite os arquivos de dados à mão** (o site lê a coluna técnica `_dados`). Para corrigir
   algo, use o site. O Consolidado pode ser aberto à vontade.

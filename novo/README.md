@@ -2,7 +2,7 @@
 
 Sistema web para cronometrar atividades e transformar as medições em **tempo padrão** e
 **produtividade** — por minuto, hora, dia, semana, mês e ano — individualmente (por atividade e
-por operador) e agrupada (por setor, por área e na empresa toda).
+por operador) e agrupada (por setor, por operação e na empresa toda).
 
 Refeito do zero a partir das funções do site anterior, seguindo a metodologia do
 *Treinamento de Métodos & Processos* (10 passos do tempo padrão).
@@ -55,12 +55,12 @@ atividades importadas entram com ritmo 100% e tolerância 0%; ajuste depois em *
 |---|---|
 | Senha fixa no código | Login Microsoft da empresa (modo SharePoint) |
 | Planilha Google via Apps Script (lenta, com tempo limite) | SharePoint via Microsoft Graph, offline primeiro, sincronização em segundo plano |
-| Áreas → Setores → Atividades, sequência, exclusão em lote, mover | Estrutura com árvore lateral, cartões com métricas agregadas, código 1.4.2, seleção em lote (excluir, mover, duplicar) |
+| Operações → Setores → Atividades, sequência, exclusão em lote, mover | Estrutura com árvore lateral, cartões com métricas agregadas, código 1.4.2, seleção em lote (excluir, mover, duplicar) |
 | Cadastro da atividade: descrição, critérios, considerações, 8 parâmetros, campo de ritmo, paradas | Igual, sem limite de parâmetros (número, texto ou lista), quantidade fixa (frequência lógica) ou informada, pessoas na medição, ritmo Westinghouse, tabela de tolerâncias |
 | Cronômetro: iniciar/zerar/salvar e próximo, anomalia, observação fixável | Leitura contínua (registra e já inicia o próximo), pausa, descartar, desfazer, campos fixáveis, atalhos de teclado, tela sempre ligada, sobrevive a recarregar a página, funciona sem internet |
 | Adicionar/editar/excluir/mover medição | Igual + incluir/excluir do cálculo (nivelamento manual) |
 | Paradas programadas e motivos de anomalia | Paradas por jornada (viram tolerância) ou por ciclo; motivos podem tirar a medição do cálculo |
-| Dashboard: total, médio, padrão, mínimo, desvio, CV, 4 gráficos, resumo | Produtividade: visão geral, por atividade, por setor/área, por operador e planejamento; gráfico de controle, histograma, tendência; tabela equivalente em cada gráfico |
+| Dashboard: total, médio, padrão, mínimo, desvio, CV, 4 gráficos, resumo | Produtividade: visão geral, por atividade, por setor/operação, por operador e planejamento; gráfico de controle, histograma, tendência; tabela equivalente em cada gráfico |
 | Capacidade por hora | Produtividade por minuto, hora, dia, semana, mês e ano — por pessoa, equipe ou planejada |
 | — | Confiabilidade da amostra (nº de ciclos necessários), gargalo, balanceamento, takt time, pessoas necessárias, eficiência (EF%) e produção do dia |
 | Fluxograma com versões editáveis no navegador | Fluxograma automático com tempos e gargalo; versões editáveis salvas no banco (compartilhadas), exportação SVG/PNG/PDF/JSON |

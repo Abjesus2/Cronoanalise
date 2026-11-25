@@ -32,7 +32,7 @@ export function telaGuia() {
             <h2 style="color:var(--paper)">Como usar em 4 passos</h2>
             <div class="grade g4">
               ${[
-                ['tree-structure', 'Organize', 'Cadastre áreas, setores e atividades na ordem do processo.', '#/estrutura'],
+                ['tree-structure', 'Organize', 'Cadastre operações, setores e atividades na ordem do processo.', '#/estrutura'],
                 ['timer', 'Cronometre', 'Abra o cronômetro, toque em Iniciar e em Registrar ciclo a cada peça/lote.', '#/cronometro'],
                 ['seal-check', 'Confie', 'Continue até a confiabilidade da amostra chegar a 100%.', '#/produtividade/atividades'],
                 ['chart-line-up', 'Use', 'Veja a produtividade por minuto, hora, dia, mês e ano; planeje a equipe.', '#/produtividade'],
