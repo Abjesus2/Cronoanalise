@@ -150,8 +150,73 @@ class Store {
     return this.memo('lista:' + col, () => [...this.dados[col].values()]);
   }
 
+  /** Conjunto de parâmetros gerais padrão da empresa (id 'global'). */
   config() {
-    return this.memo('config', () => ({ ...CONFIG_PADRAO, ...(this.dados.config.get('global') || {}) }));
+    return this.conjunto('global');
+  }
+
+  /* ---------- conjuntos de parâmetros gerais (cada operação/setor pode usar o seu) ---------- */
+
+  /** Um conjunto de parâmetros, sempre completo (campos faltantes vêm do padrão de fábrica). */
+  conjunto(id) {
+    const chave = id && this.dados.config.has(id) ? id : 'global';
+    return this.memo('conjunto:' + chave, () => {
+      const salvo = this.dados.config.get(chave) || {};
+      return { ...CONFIG_PADRAO, ...salvo, id: chave, nome: chave === 'global' ? 'Padrão da empresa' : salvo.nome || 'Sem nome' };
+    });
+  }
+
+  /** Todos os conjuntos: o padrão primeiro, depois os demais em ordem alfabética. */
+  conjuntos() {
+    return this.memo('conjuntos', () => {
+      const outros = ordenarPor(this.lista('config').filter(c => c.id !== 'global'), c => c.nome || '');
+      return [this.conjunto('global'), ...outros.map(c => this.conjunto(c.id))];
+    });
+  }
+
+  /** Id do conjunto que vale para a operação (área). */
+  conjuntoIdDaArea(areaId) {
+    const a = this.obter('areas', areaId);
+    return this.conjuntoValido(a?.configId) ? a.configId : 'global';
+  }
+
+  /** Id do conjunto que vale para o setor: o próprio, ou herdado da operação. */
+  conjuntoIdDoSetor(setorId) {
+    const s = this.obter('setores', setorId);
+    if (this.conjuntoValido(s?.configId)) return s.configId;
+    return this.conjuntoIdDaArea(s?.areaId);
+  }
+
+  conjuntoValido(id) {
+    return Boolean(id) && (id === 'global' || this.dados.config.has(id));
+  }
+
+  configDaArea(areaId) {
+    return this.conjunto(this.conjuntoIdDaArea(areaId));
+  }
+
+  configDoSetor(setorId) {
+    return this.conjunto(this.conjuntoIdDoSetor(setorId));
+  }
+
+  configDaAtividade(atividade) {
+    return this.configDoSetor(atividade?.setorId);
+  }
+
+  /** Conjunto que vale para um escopo { atividadeId | setorId | areaId }; sem escopo, o padrão. */
+  configDoEscopo(escopo = {}) {
+    if (escopo.atividadeId) return this.configDaAtividade(this.obter('atividades', escopo.atividadeId));
+    if (escopo.setorId) return this.configDoSetor(escopo.setorId);
+    if (escopo.areaId) return this.configDaArea(escopo.areaId);
+    return this.config();
+  }
+
+  /** Onde cada conjunto é usado (para mostrar e para limpar referências ao excluir). */
+  usoDoConjunto(id) {
+    return {
+      areas: this.areas().filter(a => this.conjuntoIdDaArea(a.id) === id),
+      setores: this.setores().filter(s => s.configId && this.conjuntoValido(s.configId) && s.configId === id),
+    };
   }
 
   areas() {
@@ -376,8 +441,25 @@ class Store {
   }
 
   salvarConfig(parcial) {
-    const atual = this.dados.config.get('global') || { id: 'global', nome: 'Configuração geral' };
-    return this.salvar('config', { ...atual, ...parcial, id: 'global', nome: 'Configuração geral' }, { rotulo: 'parâmetros gerais' });
+    return this.salvarConjunto('global', parcial);
+  }
+
+  /** Cria (id vazio) ou atualiza um conjunto de parâmetros gerais. */
+  salvarConjunto(id, parcial) {
+    const novoId = id || uid();
+    const atual = this.dados.config.get(novoId) || {};
+    const nome = novoId === 'global' ? 'Padrão da empresa' : (parcial.nome ?? atual.nome ?? 'Novo conjunto');
+    const { id: _ignorado, ...resto } = parcial;
+    return this.salvar('config', { ...atual, ...resto, id: novoId, nome }, { rotulo: `parâmetros gerais "${nome}"` });
+  }
+
+  /** Exclui um conjunto; operações e setores que o usavam voltam ao padrão / herdam da operação. */
+  excluirConjunto(id) {
+    if (!id || id === 'global') return;
+    const uso = this.usoDoConjunto(id);
+    if (uso.areas.length) this.salvarVarios('areas', uso.areas.map(a => ({ ...a, configId: null })), { registrarHistorico: false });
+    if (uso.setores.length) this.salvarVarios('setores', uso.setores.map(s => ({ ...s, configId: null })), { registrarHistorico: false });
+    this.excluir('config', [id]);
   }
 
   /* ------------------------------ SharePoint ------------------------------ */

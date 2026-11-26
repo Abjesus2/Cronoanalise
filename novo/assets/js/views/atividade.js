@@ -1,7 +1,7 @@
 // Tela da atividade: produtividade, cálculo passo a passo, medições e método.
 import { html, nothing } from '../lib.js';
 import { store } from '../core/store.js';
-import { analise, contexto } from '../core/consultas.js';
+import { analise, contextoDe } from '../core/consultas.js';
 import {
   analisarAtividade, normalizarAtividade, WESTINGHOUSE, fatorWestinghouse, TABELA_TOLERANCIAS,
   calcularTabelaTolerancias, ROTULO_PERIODO,
@@ -9,7 +9,7 @@ import {
 import { fmtTempo, fmtTempoCurto } from '../core/time.js';
 import { combina, fmtQtd, fmtPct, fmtNum, fmtDataHora, fmtData, numero, uid, ordenarPor, finito } from '../core/util.js';
 import { ehAvancado } from '../core/prefs.js';
-import { ic, num, anel, seloSaude, vazio, ajuda, menuAcoes, toast, confirmar } from '../ui/ui.js';
+import { ic, num, anel, seloSaude, seloConjunto, vazio, ajuda, menuAcoes, toast, confirmar } from '../ui/ui.js';
 import { cabecalho } from '../ui/layout.js';
 import { cartaoGrafico, graficoControle, histograma, barraSegmentada, tabelaSimples } from '../ui/charts.js';
 import { formAtividade, formMedicao, excluirComConfirmacao, moverAtividades, moverMedicoes, duplicarAtividade, UNIDADES } from '../ui/formularios.js';
@@ -40,7 +40,7 @@ const ROTULO_STATUS = {
 /* =============================== RESUMO =============================== */
 function heroiProdutividade(an) {
   const a = an.atividade;
-  const cfg = store.config();
+  const cfg = store.configDaAtividade(a);
   const bases = {
     pessoa: { rot: 'Por pessoa', prod: an.prodPessoa, sub: '1 pessoa no ritmo normal' },
     equipe: { rot: `Equipe (${an.pessoas})`, prod: an.prodEquipe, sub: `${an.pessoas} pessoa(s) alocada(s) na operação` },
@@ -53,7 +53,7 @@ function heroiProdutividade(an) {
       <div class="stack tight">
         <span class="sobretitulo" style="color:var(--brand)">${ic('trend-up', 'fill')} Produtividade ${ajuda('produtividade')}</span>
         <div class="heroi-numero">${num(valor)}<small>${a.unidade}(s) ${ROTULO_PERIODO[ui.periodo]}</small></div>
-        <span class="soft">${b.sub} · tempo padrão de <b style="color:var(--paper)">${fmtTempo(an.tempoPadrao)}</b> por ${a.unidade}</span>
+        <span class="soft">${b.sub} · tempo padrão de <b style="color:var(--paper)">${fmtTempo(an.tempoPadrao)}</b> por ${a.unidade} · jornada de ${fmtNum(cfg.jornadaMin, 0)} min, ${fmtNum(cfg.diasMes, 0)} dias/mês</span>
       </div>
       <div class="segmentado" style="background:color-mix(in srgb,var(--paper) 8%,transparent);border-color:transparent" role="group" aria-label="Base de cálculo">
         ${Object.entries(bases).map(([k, v]) => html`<button aria-pressed=${ui.base === k} style=${ui.base === k ? '' : 'color:color-mix(in srgb,var(--paper) 70%,transparent)'} @click=${() => { ui.base = k; atualizar(); }}>${v.rot}</button>`)}
@@ -107,7 +107,7 @@ function abaResumo(an) {
     })}</section>`;
   }
   const faltam = an.ciclos.necessario ? Math.max(0, an.ciclos.necessario - an.nValidas) : null;
-  const cfg = store.config();
+  const cfg = store.configDaAtividade(a);
   const cvClasse = an.est.cv == null ? '' : an.est.cv <= cfg.cvBom ? 'good' : an.est.cv <= cfg.cvAtencao ? 'warning' : 'critical';
   const comp = [
     { rotulo: 'Tempo normal', v: an.tempoNormal, cor: 'var(--series-1)', texto: fmtTempo(an.tempoNormal) },
@@ -288,12 +288,12 @@ function secaoMetodo(titulo, icone, conteudo, ajudaChave) {
 function abaMetodo(an) {
   const original = an.atividade;
   const r = rascunhoDe(original);
-  const preview = analisarAtividade(r, store.medicoes(original.id), contexto());
+  const preview = analisarAtividade(r, store.medicoes(original.id), contextoDe(original));
   const alterado = JSON.stringify(normalizarAtividade(original)) !== JSON.stringify(r);
   const numericos = r.parametros.filter(p => p.tipo === 'numero');
   const ok = () => atualizar();
   const programadas = store.paradas('programada');
-  const cfg = store.config();
+  const cfg = store.configDaAtividade(original);
 
   const criarParam = (nome, campo) => {
     const id = uid();
@@ -358,7 +358,7 @@ function abaMetodo(an) {
 
     ${secaoMetodo('Tolerâncias', 'coffee', html`
       <div class="segmentado">
-        <button aria-pressed=${r.tolerancia.modo === 'padrao'} @click=${() => { r.tolerancia.modo = 'padrao'; ok(); }}>Padrão da empresa (${fmtPct(cfg.toleranciaPadrao, 0)})</button>
+        <button aria-pressed=${r.tolerancia.modo === 'padrao'} @click=${() => { r.tolerancia.modo = 'padrao'; ok(); }}>Padrão do conjunto (${fmtPct(cfg.toleranciaPadrao, 0)})</button>
         <button aria-pressed=${r.tolerancia.modo === 'percentual'} @click=${() => { r.tolerancia.modo = 'percentual'; ok(); }}>Informar %</button>
         <button aria-pressed=${r.tolerancia.modo === 'tabela'} @click=${() => { r.tolerancia.modo = 'tabela'; ok(); }}>Tabela de tolerâncias</button>
       </div>
@@ -519,7 +519,7 @@ export function telaAtividade(rota) {
         sobre: [c.area?.nome, c.setor?.nome].filter(Boolean).join(' › ') || 'Atividade',
         icone: 'cube',
         titulo: a.nome,
-        extra: html`<div class="row wrap"><span class="selo contorno mono" data-dica="Classificação operação.setor.atividade">${store.codigo(store.obter('atividades', id))}</span>${seloSaude(an.saude)}
+        extra: html`<div class="row wrap"><span class="selo contorno mono" data-dica="Classificação operação.setor.atividade">${store.codigo(store.obter('atividades', id))}</span>${seloSaude(an.saude)}${seloConjunto(store.configDaAtividade(a))}
           <span class="selo contorno">${ic('stack')} ${a.unidade}</span>
           ${a.maquina ? html`<span class="selo contorno">${ic('gear-six')} ${a.maquina}</span>` : nothing}
           ${a.exemplo ? html`<span class="selo marca">exemplo</span>` : nothing}</div>`,

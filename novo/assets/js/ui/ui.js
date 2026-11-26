@@ -276,6 +276,13 @@ export function seloSaude(saude, compacto = false) {
   return html`<span class="selo ${s.classe}" data-dica=${compacto ? s.rotulo : nothing}>${ic(s.icone, 'fill')}${compacto ? nothing : s.rotulo}</span>`;
 }
 
+/** Selo com o conjunto de parâmetros gerais em uso (o padrão só aparece se pedido). */
+export function seloConjunto(cfg, { mostrarPadrao = false, prefixo = '' } = {}) {
+  if (!cfg || (cfg.id === 'global' && !mostrarPadrao)) return nothing;
+  const dica = `Parâmetros gerais: ${cfg.nome}\nJornada ${fmtNum(cfg.jornadaMin, 0)} min · ${fmtNum(cfg.diasSemana, 0)} dias/semana · ${fmtNum(cfg.diasMes, 0)} dias/mês\nMeta de eficiência ${fmtPct(cfg.eficienciaMeta, 0)} · tolerância padrão ${fmtPct(cfg.toleranciaPadrao, 0)}`;
+  return html`<a class="selo acento" style="text-decoration:none" href="#/configuracoes/geral?conjunto=${encodeURIComponent(cfg.id)}" data-dica=${dica}>${ic('sliders-horizontal')}${prefixo}${cfg.nome}</a>`;
+}
+
 export function vazio({ icone = 'stack', titulo, texto, acao }) {
   return html`<div class="vazio">
     <div class="ilustra">${ic(icone, 'duo')}</div>

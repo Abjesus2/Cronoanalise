@@ -29,13 +29,31 @@ function rodape(fechar, rotulo = 'Salvar', extra = nothing) {
 }
 
 /* ------------------------------ Área ------------------------------ */
+/** Campo para escolher o conjunto de parâmetros gerais (operação ou setor). */
+function campoConjunto(valor, aoMudar, { herdarDe = null } = {}) {
+  const conjuntos = store.conjuntos();
+  const herdado = herdarDe ? store.conjunto(store.conjuntoIdDaArea(herdarDe)) : null;
+  return html`<div class="campo cheio"><label>Parâmetros gerais (jornada, dias úteis, meta…)</label>
+    <select class="entrada" @change=${ev => aoMudar(ev.target.value || null)}>
+      ${herdarDe
+        ? html`<option value="" ?selected=${!valor}>Herdar da operação (${herdado.nome})</option>`
+        : nothing}
+      ${conjuntos.map(c => (herdarDe || c.id !== 'global')
+        ? html`<option value=${c.id} ?selected=${valor === c.id}>${c.nome} — ${fmtNum(c.jornadaMin, 0)} min/dia, ${fmtNum(c.diasMes, 0)} dias/mês</option>`
+        : html`<option value="" ?selected=${!valor}>${c.nome} — ${fmtNum(c.jornadaMin, 0)} min/dia, ${fmtNum(c.diasMes, 0)} dias/mês</option>`)}
+    </select>
+    <span class="ajuda">${herdarDe ? 'Use outro conjunto só se este setor trabalhar diferente da operação (outro turno, outra meta).' : 'Operações que funcionam diferente podem ter jornada, dias úteis e metas próprias.'}
+      <a href="#/configuracoes/geral" @click=${() => document.querySelector('dialog[open]')?.close()}>Criar ou editar conjuntos</a></span>
+  </div>`;
+}
+
 export function formArea(area = null) {
-  const e = { nome: area?.nome || '', seq: area?.seq ?? store.proximaSequencia('areas'), descricao: area?.descricao || '' };
+  const e = { nome: area?.nome || '', seq: area?.seq ?? store.proximaSequencia('areas'), descricao: area?.descricao || '', configId: area?.configId || null };
   return abrirDialogo(({ fechar }) => html`
     <form @submit=${ev => {
       ev.preventDefault();
       if (!e.nome.trim()) return;
-      const salvo = store.salvar('areas', { ...(area || {}), nome: e.nome.trim(), seq: numero(e.seq), descricao: e.descricao.trim() });
+      const salvo = store.salvar('areas', { ...(area || {}), nome: e.nome.trim(), seq: numero(e.seq), descricao: e.descricao.trim(), configId: e.configId || null });
       toast(area ? 'Operação atualizada' : 'Operação criada');
       fechar(salvo);
     }}>
@@ -43,10 +61,11 @@ export function formArea(area = null) {
       <div class="dlg-corpo">
         <div class="grade-form">
           <div class="campo cheio"><label for="fa-nome">Nome da operação</label>
-            <input id="fa-nome" class="entrada" required autofocus .value=${e.nome} @input=${ev => (e.nome = ev.target.value)} placeholder="Ex.: Produção" /></div>
+            <input id="fa-nome" class="entrada" required autofocus .value=${e.nome} @input=${ev => (e.nome = ev.target.value)} placeholder="Ex.: Controladora" /></div>
           <div class="campo"><label for="fa-seq">Sequência</label>
             <input id="fa-seq" class="entrada" type="number" min="1" .value=${String(e.seq ?? '')} @input=${ev => (e.seq = ev.target.value)} />
             <span class="ajuda">Ordem de exibição e do fluxo.</span></div>
+          ${campoConjunto(e.configId, v => (e.configId = v))}
           <div class="campo cheio"><label for="fa-desc">Descrição (opcional)</label>
             <textarea id="fa-desc" class="entrada" .value=${e.descricao} @input=${ev => (e.descricao = ev.target.value)}></textarea></div>
         </div>
@@ -62,13 +81,14 @@ export function formSetor(setor = null, areaId = null) {
     areaId: setor?.areaId || areaId || store.areas()[0]?.id || '',
     seq: setor?.seq ?? null,
     descricao: setor?.descricao || '',
+    configId: setor?.configId || null,
   };
   if (e.seq == null && e.areaId) e.seq = store.proximaSequencia('setores', e.areaId);
   return abrirDialogo(({ fechar, atualizar }) => html`
     <form @submit=${ev => {
       ev.preventDefault();
       if (!e.nome.trim() || !e.areaId) return;
-      const salvo = store.salvar('setores', { ...(setor || {}), nome: e.nome.trim(), areaId: e.areaId, seq: numero(e.seq), descricao: e.descricao.trim() });
+      const salvo = store.salvar('setores', { ...(setor || {}), nome: e.nome.trim(), areaId: e.areaId, seq: numero(e.seq), descricao: e.descricao.trim(), configId: e.configId || null });
       toast(setor ? 'Setor atualizado' : 'Setor criado');
       fechar(salvo);
     }}>
@@ -85,6 +105,7 @@ export function formSetor(setor = null, areaId = null) {
             }}>${store.areas().map(a => html`<option value=${a.id} ?selected=${a.id === e.areaId}>${a.nome}</option>`)}</select></div>
           <div class="campo"><label for="fs-seq">Sequência no fluxo</label>
             <input id="fs-seq" class="entrada" type="number" min="1" .value=${String(e.seq ?? '')} @input=${ev => (e.seq = ev.target.value)} /></div>
+          ${campoConjunto(e.configId, v => (e.configId = v), { herdarDe: e.areaId })}
           <div class="campo cheio"><label for="fs-desc">Descrição (opcional)</label>
             <textarea id="fs-desc" class="entrada" .value=${e.descricao} @input=${ev => (e.descricao = ev.target.value)}></textarea></div>
         </div>` : html`<div class="aviso alerta">${ic('warning', 'fill')}<div>Crie uma operação primeiro.</div></div>`}

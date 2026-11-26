@@ -62,6 +62,7 @@ atividades importadas entram com ritmo 100% e tolerância 0%; ajuste depois em *
 | Paradas programadas e motivos de anomalia | Paradas por jornada (viram tolerância) ou por ciclo; motivos podem tirar a medição do cálculo |
 | Dashboard: total, médio, padrão, mínimo, desvio, CV, 4 gráficos, resumo | Produtividade: visão geral, por atividade, por setor/operação, por operador e planejamento; gráfico de controle, histograma, tendência; tabela equivalente em cada gráfico |
 | Capacidade por hora | Produtividade por minuto, hora, dia, semana, mês e ano — por pessoa, equipe ou planejada |
+| Um único conjunto de parâmetros gerais | **Vários conjuntos de parâmetros gerais** (jornada, dias úteis, meta de eficiência, tolerância, confiança, nivelamento): cada operação escolhe o seu e um setor pode herdar ou usar outro |
 | — | Confiabilidade da amostra (nº de ciclos necessários), gargalo, balanceamento, takt time, pessoas necessárias, eficiência (EF%) e produção do dia |
 | Fluxograma com versões editáveis no navegador | Fluxograma automático com tempos e gargalo; versões editáveis salvas no banco (compartilhadas), exportação SVG/PNG/PDF/JSON |
 | Exportar CSV/Excel/DOCX | Excel com 6 abas, CSV, relatório PDF e Word, backup completo (.json) |

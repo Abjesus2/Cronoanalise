@@ -1,7 +1,7 @@
 // Exportações: Excel (várias abas), CSV, relatório imprimível (PDF) e Word.
 import { obterXLSX } from '../lib.js';
 import { store } from './store.js';
-import { analise, analisesDoEscopo, contexto } from './consultas.js';
+import { analise, analisesDoEscopo, configDoGrupo } from './consultas.js';
 import { analisarGrupo, ROTULO_SAUDE } from './calc.js';
 import { fmtTempo } from './time.js';
 import { agruparPor, baixarArquivo, nomeArquivo, escaparHTML, fmtNum, fmtPct, fmtQtd, fmtDataHora } from './util.js';
@@ -17,6 +17,7 @@ function linhaProdutividade(an) {
     'Setor': c.setor?.nome || '',
     'Atividade': an.atividade.nome,
     'Unidade': an.atividade.unidade,
+    'Parâmetros gerais': store.configDaAtividade(an.atividade).nome,
     'Medições': an.total,
     'Válidas': an.nValidas,
     'Necessárias': an.ciclos.necessario,
@@ -127,7 +128,6 @@ export async function exportarPlanilha(escopo = {}, nome = 'cronoanalise', { ana
 export function montarPlanilhaCompleta(XLSX, escopo = {}, { analises } = {}) {
   {
     const ans = analises || analisesDoEscopo(escopo);
-    const cfg = store.config();
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, folha(XLSX, ans.map(linhaProdutividade)), 'Produtividade');
 
@@ -135,12 +135,12 @@ export function montarPlanilhaCompleta(XLSX, escopo = {}, { analises } = {}) {
     const setores = [...porSetor.entries()].map(([id, lista]) => {
       const s = store.obter('setores', id);
       const area = s ? store.obter('areas', s.areaId) : null;
-      return linhaGrupo(s?.nome || '', { 'Operação': area?.nome || '' }, analisarGrupo(lista, cfg), lista.find(a => a.tempoPadrao)?.atividade.unidade || '');
+      return linhaGrupo(s?.nome || '', { 'Operação': area?.nome || '' }, analisarGrupo(lista, configDoGrupo(lista, { setorId: id })), lista.find(a => a.tempoPadrao)?.atividade.unidade || '');
     });
     XLSX.utils.book_append_sheet(wb, folha(XLSX, setores), 'Setores');
 
     const porArea = agruparPor(ans, a => store.obter('setores', a.atividade.setorId)?.areaId);
-    const areas = [...porArea.entries()].map(([id, lista]) => linhaGrupo(store.obter('areas', id)?.nome || '', {}, analisarGrupo(lista, cfg), lista.find(a => a.tempoPadrao)?.atividade.unidade || ''));
+    const areas = [...porArea.entries()].map(([id, lista]) => linhaGrupo(store.obter('areas', id)?.nome || '', {}, analisarGrupo(lista, configDoGrupo(lista, { areaId: id })), lista.find(a => a.tempoPadrao)?.atividade.unidade || ''));
     XLSX.utils.book_append_sheet(wb, folha(XLSX, areas), 'Operações');
 
     const meds = ans.flatMap(a => store.medicoes(a.atividade.id));
@@ -152,17 +152,24 @@ export function montarPlanilhaCompleta(XLSX, escopo = {}, { analises } = {}) {
       'Frequência': p.tipo === 'programada' ? (p.freq === 'ciclo' ? 'Por ciclo' : 'Por jornada') : '',
       'Fora do cálculo': p.tipo === 'motivo' ? (p.excluiCalculo ? 'Sim' : 'Não') : '',
     }))), 'Paradas');
-    XLSX.utils.book_append_sheet(wb, folha(XLSX, [
-      { 'Parâmetro': 'Jornada (min/dia)', 'Valor': cfg.jornadaMin },
-      { 'Parâmetro': 'Dias úteis por semana', 'Valor': cfg.diasSemana },
-      { 'Parâmetro': 'Dias úteis por mês', 'Valor': cfg.diasMes },
-      { 'Parâmetro': 'Dias úteis por ano', 'Valor': cfg.diasAno },
-      { 'Parâmetro': 'Eficiência meta (%)', 'Valor': cfg.eficienciaMeta * 100 },
-      { 'Parâmetro': 'Tolerância padrão (%)', 'Valor': cfg.toleranciaPadrao * 100 },
-      { 'Parâmetro': 'Confiança (%)', 'Valor': cfg.confianca * 100 },
-      { 'Parâmetro': 'Erro relativo (%)', 'Valor': cfg.erroRel * 100 },
-      { 'Parâmetro': 'Exportado em', 'Valor': fmtDataHora(new Date().toISOString()) },
-    ]), 'Parâmetros');
+    XLSX.utils.book_append_sheet(wb, folha(XLSX, store.conjuntos().map(c => {
+      const uso = store.usoDoConjunto(c.id);
+      return {
+        'Conjunto': c.nome,
+        'Operações': uso.areas.map(a => a.nome).join(', '),
+        'Setores próprios': uso.setores.map(s => s.nome).join(', '),
+        'Jornada (min/dia)': c.jornadaMin,
+        'Dias úteis por semana': c.diasSemana,
+        'Dias úteis por mês': c.diasMes,
+        'Dias úteis por ano': c.diasAno,
+        'Eficiência meta (%)': r1(c.eficienciaMeta * 100),
+        'Tolerância padrão (%)': r1(c.toleranciaPadrao * 100),
+        'Confiança (%)': r1(c.confianca * 100),
+        'Erro relativo (%)': r1(c.erroRel * 100),
+        'Tempo base': c.mediaTempoBase === 'simples' ? 'Média simples' : 'Média ponderada',
+        'Exportado em': fmtDataHora(new Date().toISOString()),
+      };
+    })), 'Parâmetros');
     return wb;
   }
 }
@@ -203,8 +210,8 @@ export function exportarMedicoes(medicoes, nome = 'medicoes') {
 /* ------------------------------ relatório ------------------------------ */
 function htmlRelatorio(escopo, titulo) {
   const ans = analisesDoEscopo(escopo);
-  const g = analisarGrupo(ans, store.config());
-  const cfg = store.config();
+  const cfg = configDoGrupo(ans, escopo);
+  const g = analisarGrupo(ans, cfg);
   const linhas = ans
     .map(an => {
       const c = store.caminho(store.obter('atividades', an.atividade.id));

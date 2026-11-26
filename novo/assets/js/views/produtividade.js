@@ -1,11 +1,11 @@
 // Análises de produtividade: individual e agrupada.
 import { html, nothing } from '../lib.js';
 import { store } from '../core/store.js';
-import { contexto, atividadesDoEscopo } from '../core/consultas.js';
+import { contextoDe, atividadesDoEscopo, configDoGrupo, conjuntosDoGrupo } from '../core/consultas.js';
 import { analisarAtividade, analisarGrupo, analisarOperadores, ROTULO_PERIODO, ROTULO_SAUDE, eficiencia, producao, pessoasNecessarias } from '../core/calc.js';
 import { fmtTempo } from '../core/time.js';
 import { fmtQtd, fmtPct, fmtNum, fmtData, tempoRelativo, ordenarPor, numero, agruparPor } from '../core/util.js';
-import { ic, num, seloSaude, vazio, ajuda, estat } from '../ui/ui.js';
+import { ic, num, seloSaude, seloConjunto, vazio, ajuda, estat } from '../ui/ui.js';
 import { cabecalho } from '../ui/layout.js';
 import { barrasH, cartaoGrafico, graficoLinha, barraSegmentada, tabelaSimples } from '../ui/charts.js';
 import { atualizar, definirQuery, ir } from '../ui/nav.js';
@@ -40,7 +40,7 @@ function analisesFiltradas(f) {
       let meds = store.medicoes(a.id);
       if (limite) meds = meds.filter(m => m.dataHora && new Date(m.dataHora).getTime() >= limite);
       if (f.operador) meds = meds.filter(m => (m.operador || '').trim() === f.operador);
-      return analisarAtividade(a, meds, contexto());
+      return analisarAtividade(a, meds, contextoDe(a));
     });
   });
 }
@@ -65,17 +65,29 @@ function barraFiltros(f) {
   </div>`;
 }
 
-function seletorUnidade() {
-  const cfg = store.config();
+function seletorUnidade(ans = []) {
+  const conjuntos = conjuntosDoGrupo(ans);
+  const metas = new Set(conjuntos.map(c => c.eficienciaMeta));
+  const rotuloMeta = metas.size === 1 ? fmtPct([...metas][0], 0) : 'por operação';
   return html`<div class="row wrap">
     <div class="segmentado" role="group" aria-label="Período">${PERIODOS.map(p => html`<button aria-pressed=${ui.periodo === p} @click=${() => { ui.periodo = p; atualizar(); }}>${ROTULO_PERIODO[p].replace('por ', '')}</button>`)}</div>
     <div class="segmentado" role="group" aria-label="Base">
       <button aria-pressed=${ui.base === 'pessoa'} @click=${() => { ui.base = 'pessoa'; atualizar(); }}>Por pessoa</button>
       <button aria-pressed=${ui.base === 'equipe'} @click=${() => { ui.base = 'equipe'; atualizar(); }}>Equipe</button>
-      <button aria-pressed=${ui.base === 'planejada'} @click=${() => { ui.base = 'planejada'; atualizar(); }}>Planejada ${fmtPct(cfg.eficienciaMeta, 0)}</button>
+      <button aria-pressed=${ui.base === 'planejada'} @click=${() => { ui.base = 'planejada'; atualizar(); }}>Planejada (${rotuloMeta})</button>
     </div>
     ${ajuda('produtividade')}
   </div>`;
+}
+
+const escopoDe = f => (f.setorId ? { setorId: f.setorId } : f.areaId ? { areaId: f.areaId } : {});
+
+/** Aviso quando as atividades filtradas usam conjuntos de parâmetros diferentes. */
+function avisoConjuntos(ans) {
+  const cs = conjuntosDoGrupo(ans);
+  if (cs.length <= 1) return nothing;
+  return html`<div class="aviso info">${ic('sliders-horizontal', 'fill')}<div>As atividades filtradas usam <b>${cs.length} conjuntos de parâmetros gerais</b>: ${cs.map(c => seloConjunto(c, { mostrarPadrao: true }))}.
+    A produtividade de cada atividade usa o conjunto da sua operação/setor (jornada, dias úteis, meta). Os totais agrupados usam o conjunto do filtro escolhido.</div></div>`;
 }
 
 const prodDe = an => (ui.base === 'equipe' ? an.prodEquipe : ui.base === 'planejada' ? an.prodPlanejada : an.prodPessoa)?.[ui.periodo];
@@ -83,7 +95,7 @@ const prodDe = an => (ui.base === 'equipe' ? an.prodEquipe : ui.base === 'planej
 /* ------------------------------ visão geral ------------------------------ */
 function abaVisao(ans, f) {
   const comTP = ans.filter(a => a.tempoPadrao > 0);
-  const g = analisarGrupo(ans, store.config());
+  const g = analisarGrupo(ans, configDoGrupo(ans, escopoDe(f)));
   const medicoes = ans.flatMap(a => a.linhas.map(l => l.m));
   const porDia = agruparPor(medicoes.filter(m => m.dataHora), m => m.dataHora.slice(0, 10));
   const serie = [...porDia.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([d, arr]) => ({ rotulo: fmtData(d + 'T12:00:00').slice(0, 5), v: arr.length, dica: fmtData(d + 'T12:00:00') }));
@@ -100,6 +112,7 @@ function abaVisao(ans, f) {
   }));
   const operadores = new Set(medicoes.map(m => m.operador).filter(Boolean)).size;
   return html`<div class="stack loose">
+    ${avisoConjuntos(ans)}
     <section class="cartao">
       <div class="grade g4">
         ${estat('Atividades com tempo padrão', html`${num(comTP.length, 'int')}<small>de ${ans.length}</small>`, { sub: `${ans.filter(a => a.total).length} com medições` })}
@@ -116,7 +129,7 @@ function abaVisao(ans, f) {
         titulo: `Produtividade ${ROTULO_PERIODO[ui.periodo]}`,
         sub: `${ui.base === 'pessoa' ? 'Por pessoa' : ui.base === 'equipe' ? 'Pela equipe alocada' : 'Planejada (equipe × eficiência meta)'} · maiores primeiro (até 15)`,
         ajudaChave: 'produtividade',
-        acoes: seletorUnidade(),
+        acoes: seletorUnidade(ans),
         corpo: barrasH(ranking, { vazioTexto: 'Nenhuma atividade com tempo padrão nos filtros.' }),
         tabela: () => tabelaSimples([{ rotulo: 'Atividade', v: r => r.rotulo }, { rotulo: 'Setor', v: r => r.sub || '' }, { rotulo: 'Produtividade', n: true, v: r => r.texto }], ranking),
       })}
@@ -173,7 +186,8 @@ function abaAtividades(ans) {
   ord = [...ord.filter(l => (campos[ui.ordem.campo] || campos.prod)(l) != null), ...nulos];
   const th = (campo, rotulo, n) => html`<th class=${n ? 'n' : ''}><button @click=${() => { ui.ordem = { campo, desc: ui.ordem.campo === campo ? !ui.ordem.desc : true }; atualizar(); }}>${rotulo}${ui.ordem.campo === campo ? ic(ui.ordem.desc ? 'caret-down' : 'caret-up', 'bold') : nothing}</button></th>`;
   return html`<div class="stack">
-    <div class="row between wrap">${seletorUnidade()}<span class="small muted">${ans.length} atividade(s)</span></div>
+    <div class="row between wrap">${seletorUnidade(ans)}<span class="small muted">${ans.length} atividade(s)</span></div>
+    ${avisoConjuntos(ans)}
     ${ans.length ? html`<div class="tabela-wrap">
       <table class="tabela">
         <thead><tr>${th('nome', 'Atividade')}${th('setor', 'Operação › Setor')}${th('med', 'Medições', true)}${th('tp', 'Tempo padrão', true)}
@@ -197,11 +211,10 @@ function abaAtividades(ans) {
 
 /* ------------------------------ agrupado ------------------------------ */
 function abaAgrupado(ans) {
-  const cfg = store.config();
   const porSetor = agruparPor(ans, a => a.atividade.setorId);
-  const setores = [...porSetor.entries()].map(([id, lista]) => ({ item: store.obter('setores', id), g: analisarGrupo(lista, cfg), lista })).filter(x => x.item);
+  const setores = [...porSetor.entries()].map(([id, lista]) => ({ item: store.obter('setores', id), g: analisarGrupo(lista, configDoGrupo(lista, { setorId: id })), lista })).filter(x => x.item);
   const porArea = agruparPor(setores, s => s.item.areaId);
-  const areas = [...porArea.entries()].map(([id, ss]) => ({ item: store.obter('areas', id), g: analisarGrupo(ss.flatMap(s => s.lista), cfg), lista: ss.flatMap(s => s.lista) })).filter(x => x.item);
+  const areas = [...porArea.entries()].map(([id, ss]) => ({ item: store.obter('areas', id), g: analisarGrupo(ss.flatMap(s => s.lista), configDoGrupo(ss.flatMap(s => s.lista), { areaId: id })), lista: ss.flatMap(s => s.lista) })).filter(x => x.item);
   const unidadeDe = lista => lista.find(a => a.tempoPadrao)?.atividade.unidade || 'un.';
   const tabela = (linhas, tipo) => html`<div class="tabela-wrap"><table class="tabela">
     <thead><tr><th>${tipo === 'setor' ? 'Setor' : 'Operação'}</th><th class="n">Atividades</th><th class="n">Medições</th>
@@ -223,7 +236,8 @@ function abaAgrupado(ans) {
       </tr>`;
     })}</tbody></table></div>`;
   return html`<div class="stack loose">
-    <div class="row between wrap">${seletorUnidade()}</div>
+    <div class="row between wrap">${seletorUnidade(ans)}</div>
+    ${avisoConjuntos(ans)}
     <div class="aviso info">${ic('info', 'fill')}<div>O agrupamento considera que as atividades de um setor/operação formam uma sequência (linha) para o mesmo produto. A <b>capacidade do fluxo</b> é limitada pelo gargalo; a <b>produtividade por pessoa</b> é quanto 1 pessoa produziria fazendo todas as etapas.</div></div>
     <section class="stack"><h2 class="row">${ic('squares-four', 'duo')} Por setor</h2>${setores.length ? tabela(setores, 'setor') : html`<p class="muted">Sem dados.</p>`}</section>
     <section class="stack"><h2 class="row">${ic('buildings', 'duo')} Por operação</h2>${areas.length ? tabela(areas, 'area') : html`<p class="muted">Sem dados.</p>`}</section>
@@ -276,13 +290,13 @@ function abaOperadores(ans, f) {
 
 /* ------------------------------ planejamento ------------------------------ */
 function abaPlanejamento(ans, f) {
-  const cfg = store.config();
   const p = ui.plan;
   if (!p.setorId || !store.obter('setores', p.setorId)) p.setorId = f.setorId || store.setores().find(s => store.atividades(s.id).length)?.id || '';
+  const cfg = store.configDoSetor(p.setorId);
   const jornada = numero(p.jornada) || cfg.jornadaMin;
   const ef = (numero(p.ef) || cfg.eficienciaMeta * 100) / 100;
   const demanda = numero(p.demanda) || 0;
-  const doSetor = p.setorId ? store.atividades(p.setorId).map(a => analisarAtividade(a, store.medicoes(a.id), contexto())).filter(a => a.tempoPadrao > 0) : [];
+  const doSetor = p.setorId ? store.atividades(p.setorId).map(a => analisarAtividade(a, store.medicoes(a.id), contextoDe(a))).filter(a => a.tempoPadrao > 0) : [];
   const takt = demanda > 0 ? (jornada * 60) / demanda : null;
   const linhas = doSetor.map(an => {
     const nec = pessoasNecessarias(an.tempoPadrao, demanda, jornada, ef);
@@ -294,7 +308,7 @@ function abaPlanejamento(ans, f) {
   const totalAloc = linhas.reduce((s, l) => s + l.alocar, 0);
   const capLinha = linhas.length ? Math.min(...linhas.map(l => l.capDia)) : null;
   const un = doSetor[0]?.atividade.unidade || 'un.';
-  const opcoesAtividades = store.atividades().map(a => ({ a, an: analisarAtividade(a, store.medicoes(a.id), contexto()) })).filter(x => x.an.tempoPadrao > 0);
+  const opcoesAtividades = store.atividades().map(a => ({ a, an: analisarAtividade(a, store.medicoes(a.id), contextoDe(a)) })).filter(x => x.an.tempoPadrao > 0);
 
   const e1 = ui.ef;
   const tpEf = e1.atividadeId ? opcoesAtividades.find(x => x.a.id === e1.atividadeId)?.an.tempoPadrao : (numero(e1.tpMin) || 0) * 60;

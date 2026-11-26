@@ -4,7 +4,7 @@ import { store } from '../core/store.js';
 import { analise, grupo } from '../core/consultas.js';
 import { fmtTempo } from '../core/time.js';
 import { combina, fmtQtd, fmtPct, ordenarPor, tempoRelativo, fmtNum } from '../core/util.js';
-import { ic, num, anel, seloSaude, vazio, ajuda, menuAcoes, medidor, toast } from '../ui/ui.js';
+import { ic, num, anel, seloSaude, seloConjunto, vazio, ajuda, menuAcoes, medidor, toast } from '../ui/ui.js';
 import { cabecalho } from '../ui/layout.js';
 import { barrasH, cartaoGrafico, tabelaSimples } from '../ui/charts.js';
 import { formArea, formSetor, formAtividade, excluirComConfirmacao, moverAtividades, duplicarAtividade } from '../ui/formularios.js';
@@ -129,7 +129,7 @@ function telaAreas() {
             <div class="topo">
               <span class="seq">${a.seq ?? '–'}</span>
               <div class="grow stack tight"><h3>${a.nome}</h3>
-                <span class="small muted">${store.setores(a.id).length} setor(es) · ${gr.nAtividades} atividade(s)${a.exemplo ? ' · exemplo' : ''}</span></div>
+                <span class="small muted">${store.setores(a.id).length} setor(es) · ${gr.nAtividades} atividade(s)${a.exemplo ? ' · exemplo' : ''}</span>${a.configId && store.conjuntoValido(a.configId) ? html`<span style="margin-top:4px" @click=${e => e.stopPropagation()}>${seloConjunto(store.configDaArea(a.id))}</span>` : nothing}</div>
               ${ui.selecionando ? nothing : html`<button class="btn fantasma icone pequeno menu-card" aria-label="Ações" @click=${e => { e.stopPropagation(); acoesArea(a); }}>${ic('dots-three', 'bold')}</button>`}
             </div>
             ${medidor(gr.nAtividades ? gr.nComTP / gr.nAtividades : 0, 'good')}
@@ -246,6 +246,7 @@ function telaArea(id) {
         sobre: 'Operação',
         icone: 'buildings',
         titulo: area.nome,
+        extra: html`<div class="row wrap">${seloConjunto(store.configDaArea(area.id), { mostrarPadrao: true, prefixo: 'Parâmetros: ' })}</div>`,
         texto: area.descricao || `${setores.length} setor(es) · ${gr.nAtividades} atividade(s) · ${gr.medicoes} medições`,
         acoes: html`<button class="btn icone" aria-label="Mais ações" data-dica="Mais ações" @click=${() => acoesArea(area)}>${ic('dots-three', 'bold')}</button>
           <a class="btn" href="#/produtividade?area=${area.id}">${ic('chart-line-up')} Produtividade</a>
@@ -265,7 +266,7 @@ function telaArea(id) {
                   ${marcador(s.id)}
                   <div class="topo">
                     <span class="seq">${s.seq ?? '–'}</span>
-                    <div class="grow stack tight"><h3>${s.nome}</h3><span class="small muted">${g.nAtividades} atividade(s) · ${g.medicoes} medições</span></div>
+                    <div class="grow stack tight"><h3>${s.nome}</h3><span class="small muted">${g.nAtividades} atividade(s) · ${g.medicoes} medições</span>${s.configId && store.conjuntoValido(s.configId) ? html`<span style="margin-top:4px" @click=${e => e.stopPropagation()}>${seloConjunto(store.configDoSetor(s.id), { mostrarPadrao: true, prefixo: 'próprio: ' })}</span>` : nothing}</div>
                     ${ui.selecionando ? nothing : html`<button class="btn fantasma icone pequeno menu-card" aria-label="Ações" @click=${e => { e.stopPropagation(); acoesSetor(s); }}>${ic('dots-three', 'bold')}</button>`}
                   </div>
                   ${medidor(g.nAtividades ? g.nComTP / g.nAtividades : 0, 'good')}
@@ -324,6 +325,7 @@ function telaSetor(id) {
         sobre: area?.nome || 'Setor',
         icone: 'squares-four',
         titulo: setor.nome,
+        extra: html`<div class="row wrap">${seloConjunto(store.configDoSetor(setor.id), { mostrarPadrao: true, prefixo: setor.configId ? 'Parâmetros próprios: ' : 'Parâmetros: ' })}</div>`,
         texto: setor.descricao || `${ats.length} atividade(s) · ${gr.medicoes} medições`,
         acoes: html`<button class="btn icone" aria-label="Mais ações" data-dica="Mais ações" @click=${() => acoesSetor(setor)}>${ic('dots-three', 'bold')}</button>
           <a class="btn" href="#/fluxograma?area=${setor.areaId}&setor=${id}">${ic('flow-arrow')} Fluxograma</a>

@@ -2,7 +2,7 @@
 // Arquivos do próprio site: rede primeiro (sempre a versão mais nova), cache como reserva.
 // Bibliotecas de CDN (URLs com versão fixa): cache primeiro.
 // Nunca intercepta login (login.microsoftonline.com) nem a API do Graph.
-const VERSAO = 'crono-v2-2026-11-25-operacao';
+const VERSAO = 'crono-v2-2026-11-26-conjuntos';
 const CDN = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {

@@ -3,15 +3,22 @@ import { store } from './store.js';
 import { analisarAtividade, analisarGrupo, analisarOperadores } from './calc.js';
 import { combina } from './util.js';
 
-export function contexto() {
-  return store.memo('ctx', () => ({ config: store.config(), paradas: store.mapaParadas() }));
+/** Contexto de cálculo com um conjunto de parâmetros (padrão: o da empresa). */
+export function contexto(conjuntoId = 'global') {
+  const cfg = store.conjunto(conjuntoId);
+  return store.memo('ctx:' + cfg.id, () => ({ config: cfg, paradas: store.mapaParadas() }));
+}
+
+/** Contexto com o conjunto de parâmetros que vale para a atividade (setor → operação → padrão). */
+export function contextoDe(atividade) {
+  return contexto(store.conjuntoIdDoSetor(atividade?.setorId));
 }
 
 export function analise(atividadeId) {
   return store.memo('an:' + atividadeId, () => {
     const a = store.obter('atividades', atividadeId);
     if (!a) return null;
-    return analisarAtividade(a, store.medicoes(atividadeId), contexto());
+    return analisarAtividade(a, store.medicoes(atividadeId), contextoDe(a));
   });
 }
 
@@ -31,7 +38,23 @@ export function analisesDoEscopo(escopo = {}) {
 }
 
 export function grupo(escopo = {}) {
-  return store.memo('gr:' + JSON.stringify(escopo), () => analisarGrupo(analisesDoEscopo(escopo), store.config()));
+  return store.memo('gr:' + JSON.stringify(escopo), () => analisarGrupo(analisesDoEscopo(escopo), configDoGrupo(analisesDoEscopo(escopo), escopo)));
+}
+
+/**
+ * Conjunto usado nos indicadores do grupo (capacidade por dia/mês, meta de eficiência).
+ * Se todas as atividades do grupo usam o mesmo conjunto, é ele; senão, o do escopo
+ * (setor/operação) ou o padrão da empresa.
+ */
+export function configDoGrupo(analises, escopo = {}) {
+  const ids = new Set(analises.map(an => store.conjuntoIdDoSetor(an.atividade.setorId)));
+  if (ids.size === 1) return store.conjunto([...ids][0]);
+  return store.configDoEscopo(escopo);
+}
+
+/** Os conjuntos de parâmetros usados por um grupo de análises (para avisar quando há mais de um). */
+export function conjuntosDoGrupo(analises) {
+  return [...new Set(analises.map(an => store.conjuntoIdDoSetor(an.atividade.setorId)))].map(id => store.conjunto(id));
 }
 
 export function grupoArea(areaId) {

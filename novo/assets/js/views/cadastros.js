@@ -27,7 +27,7 @@ export function telaCadastros() {
             <h2 class="row">${ic('coffee', 'duo')} Paradas programadas ${ajuda('tolerancia')}</h2>
             <button class="btn primario pequeno" @click=${() => formParada(null, 'programada')}>${ic('plus')} Nova</button>
           </div>
-          ${totalJornada ? html`<div class="aviso">${ic('clock')}<div>Paradas por jornada somam <b>${fmtTempo(totalJornada, { casas: 0 })}</b> de ${fmtNum(cfg.jornadaMin, 0)} min
+          ${totalJornada ? html`<div class="aviso">${ic('clock')}<div>Paradas por jornada somam <b>${fmtTempo(totalJornada, { casas: 0 })}</b> de ${fmtNum(cfg.jornadaMin, 0)} min da jornada padrão
             (${fmtPct(totalJornada / jornadaSeg)} da jornada). Quando aplicadas a uma atividade, viram tolerância de <b>${fmtPct(totalJornada / (jornadaSeg - totalJornada))}</b>.</div></div>` : nothing}
           ${programadas.length ? html`<div class="lista">${programadas.map(p => html`<div class="item">
             <span class="avatar">${ic(p.freq === 'ciclo' ? 'repeat' : 'coffee')}</span>

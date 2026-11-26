@@ -17,10 +17,108 @@ import { carregarExemplo, removerExemplo, temExemplo } from '../core/exemplo.js'
 
 const ui = { geral: null, sp: null, importando: false, urlAntigo: URL_SISTEMA_ANTIGO, termoHist: '' };
 
-/* ------------------------------ geral ------------------------------ */
-function abaGeral() {
-  const cfg = store.config();
-  if (!ui.geral) ui.geral = { ...cfg };
+/* ------------------------------ geral (conjuntos de parâmetros) ------------------------------ */
+const CAMPOS_CONJUNTO = Object.keys(CONFIG_PADRAO).filter(k => k !== 'id');
+const valoresDe = c => Object.fromEntries(CAMPOS_CONJUNTO.map(k => [k, c[k]]));
+
+async function trocarConjunto(id) {
+  if (ui.geral && ui.geralId && ui.geralId !== id) {
+    const atual = store.conjunto(ui.geralId);
+    if (JSON.stringify(ui.geral) !== JSON.stringify(valoresDe(atual))) {
+      const ok = await confirmar({ titulo: 'Descartar alterações?', mensagem: `Há alterações não salvas em "${atual.nome}".`, confirmar: 'Descartar' });
+      if (!ok) return;
+    }
+  }
+  ui.conjuntoSel = id;
+  ui.geral = null;
+  atualizar();
+}
+
+async function novoConjunto(base = null) {
+  const origem = base || store.config();
+  const nome = await pedirTexto({
+    titulo: base ? `Duplicar "${base.nome}"` : 'Novo conjunto de parâmetros',
+    texto: 'Ex.: "CD – 2 turnos", "Web – 6 dias por semana". Depois escolha em quais operações ele vale.',
+    rotulo: 'Nome do conjunto',
+    valor: base ? `${base.nome} (cópia)` : '',
+    placeholder: 'Ex.: CD – 2 turnos',
+    icone: 'sliders-horizontal',
+    confirmar: 'Criar',
+  });
+  if (!nome) return;
+  const salvo = store.salvarConjunto(null, { ...valoresDe(origem), nome });
+  toast(`Conjunto "${nome}" criado`);
+  ui.conjuntoSel = salvo.id;
+  ui.geral = null;
+  atualizar();
+}
+
+function painelConjuntos(sel) {
+  const conjuntos = store.conjuntos();
+  return html`<section class="cartao stack">
+    <div class="row between wrap">
+      <div class="stack tight" style="gap:2px"><h3 class="row">${ic('stack', 'duo')} Conjuntos de parâmetros gerais</h3>
+        <span class="small muted">Cada operação usa um conjunto; um setor pode herdar o da operação ou usar outro.</span></div>
+      <button class="btn primario" @click=${() => novoConjunto()}>${ic('plus')} Novo conjunto</button>
+    </div>
+    <div class="grade estreita">
+      ${conjuntos.map(c => {
+        const uso = store.usoDoConjunto(c.id);
+        const ativo = c.id === sel;
+        return html`<button class="cartao clicavel" style="text-align:left;padding:14px 16px;${ativo ? 'border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)' : ''}" aria-pressed=${ativo} @click=${() => trocarConjunto(c.id)}>
+          <div class="row between"><b style="font-family:var(--f-display)">${c.nome}</b>${c.id === 'global' ? html`<span class="selo">padrão</span>` : nothing}</div>
+          <div class="small soft mt-s">${fmtNum(c.jornadaMin, 0)} min/dia · ${fmtNum(c.diasSemana, 0)} dias/sem · ${fmtNum(c.diasMes, 0)} dias/mês</div>
+          <div class="small soft">meta ${fmtPct(c.eficienciaMeta, 0)} · tolerância ${fmtPct(c.toleranciaPadrao, 0)}</div>
+          <div class="tiny muted mt-s">${uso.areas.length} operação(ões)${uso.setores.length ? ` · ${uso.setores.length} setor(es) próprios` : ''}</div>
+        </button>`;
+      })}
+    </div>
+  </section>`;
+}
+
+function painelUso(c) {
+  const uso = store.usoDoConjunto(c.id);
+  const areas = store.areas();
+  return html`<section class="cartao stack">
+    <h3 class="row">${ic('tree-structure', 'duo')} Onde "${c.nome}" vale</h3>
+    ${c.id === 'global'
+      ? html`<p class="small soft">O conjunto padrão vale para toda operação que não tiver um conjunto próprio${uso.areas.length ? ':' : '.'}</p>
+        ${uso.areas.length ? html`<div class="row wrap">${uso.areas.map(a => html`<span class="chip" style="cursor:default">${ic('buildings')} ${a.nome}</span>`)}</div>` : nothing}`
+      : areas.length
+        ? html`<p class="small soft">Marque as operações que trabalham com este conjunto:</p>
+          <div class="grade estreita" style="gap:8px">${areas.map(a => {
+            const marcado = a.configId === c.id;
+            const outro = !marcado && a.configId && store.conjuntoValido(a.configId) ? store.conjunto(a.configId).nome : null;
+            return html`<label class="check cartao plano" style="padding:10px 12px">
+              <input type="checkbox" .checked=${marcado} @change=${e => {
+                store.salvar('areas', { ...a, configId: e.target.checked ? c.id : null }, { rotulo: `parâmetros da operação ${a.nome}` });
+                toast(e.target.checked ? `"${a.nome}" passa a usar "${c.nome}"` : `"${a.nome}" volta ao padrão da empresa`);
+              }} />
+              <span class="grow">${a.nome}${outro ? html`<br /><span class="tiny muted">hoje usa "${outro}"</span>` : nothing}</span></label>`;
+          })}</div>`
+        : html`<p class="small muted">Cadastre operações na Estrutura para vinculá-las a este conjunto.</p>`}
+    ${uso.setores.length ? html`<div class="stack tight"><span class="rotulo">Setores que usam este conjunto (escolhido no cadastro do setor)</span>
+      <div class="row wrap">${uso.setores.map(s => html`<a class="chip" href="#/estrutura/setor/${s.id}">${ic('squares-four')} ${store.obter('areas', s.areaId)?.nome || ''} › ${s.nome}</a>`)}</div></div>` : nothing}
+    <p class="tiny muted">Para um setor que trabalha diferente da operação, edite o setor (Estrutura › setor › ⋯ › Editar setor) e escolha o conjunto dele.</p>
+  </section>`;
+}
+
+function abaGeral(rota) {
+  // link vindo de um selo "parâmetros: X" abre direto o conjunto X
+  const pedido = rota?.query?.conjunto || null;
+  if (pedido !== ui.conjuntoPedido) {
+    ui.conjuntoPedido = pedido;
+    if (pedido) {
+      ui.conjuntoSel = pedido;
+      ui.geral = null;
+    }
+  }
+  if (!ui.conjuntoSel || !store.conjuntoValido(ui.conjuntoSel)) ui.conjuntoSel = 'global';
+  const cfg = store.conjunto(ui.conjuntoSel);
+  if (!ui.geral || ui.geralId !== cfg.id) {
+    ui.geral = valoresDe(cfg);
+    ui.geralId = cfg.id;
+  }
   const g = ui.geral;
   const pct = (k, rot, ajudaTxt) => html`<div class="campo"><label>${rot}</label><div class="entrada-grupo">
     <input class="entrada" inputmode="decimal" .value=${fmtNum(g[k] * 100, 2)} @change=${e => { g[k] = (numero(e.target.value) ?? 0) / 100; atualizar(); }} /><span class="sufixo">%</span></div>
@@ -28,9 +126,39 @@ function abaGeral() {
   const n = (k, rot, suf, ajudaTxt) => html`<div class="campo"><label>${rot}</label><div class="entrada-grupo">
     <input class="entrada" inputmode="decimal" .value=${fmtNum(g[k], 2)} @change=${e => { g[k] = numero(e.target.value) ?? CONFIG_PADRAO[k]; if (k === 'diasMes' && !ui.anoManual) g.diasAno = g.diasMes * 12; atualizar(); }} />${suf ? html`<span class="sufixo">${suf}</span>` : nothing}</div>
     ${ajudaTxt ? html`<span class="ajuda">${ajudaTxt}</span>` : nothing}</div>`;
-  const alterado = JSON.stringify(g) !== JSON.stringify(cfg);
+  const alterado = JSON.stringify(g) !== JSON.stringify(valoresDe(cfg));
+  const padrao = cfg.id === 'global';
   return html`<div class="stack loose">
-    <div class="aviso info">${ic('users-three', 'fill')}<div>Estes parâmetros valem para <b>toda a equipe</b>${store.sync.modo === 'sharepoint' ? ' (ficam no SharePoint)' : ''} e afetam todos os cálculos de tempo padrão e produtividade.</div></div>
+    ${painelConjuntos(cfg.id)}
+    <div class="row between wrap">
+      <div class="stack tight" style="gap:2px">
+        <span class="sobretitulo">${ic('sliders-horizontal', 'fill')} Editando</span>
+        <h2>${cfg.nome}</h2>
+      </div>
+      <div class="row wrap">
+        ${!padrao ? html`<button class="btn" @click=${async () => {
+          const nome = await pedirTexto({ titulo: 'Renomear conjunto', rotulo: 'Nome', valor: cfg.nome, icone: 'textbox' });
+          if (nome) { store.salvarConjunto(cfg.id, { nome }); toast('Conjunto renomeado'); }
+        }}>${ic('textbox')} Renomear</button>` : nothing}
+        <button class="btn" @click=${() => novoConjunto(cfg)}>${ic('copy')} Duplicar</button>
+        ${!padrao ? html`<button class="btn perigo" @click=${async () => {
+          const uso = store.usoDoConjunto(cfg.id);
+          const ok = await confirmar({
+            titulo: `Excluir o conjunto "${cfg.nome}"?`,
+            mensagem: uso.areas.length || uso.setores.length
+              ? `${uso.areas.length} operação(ões) e ${uso.setores.length} setor(es) que o usam voltarão ao padrão da empresa (os setores herdam da operação). Os cálculos serão refeitos.`
+              : 'Ele não está sendo usado por nenhuma operação.',
+            perigo: true,
+            confirmar: 'Excluir',
+          });
+          if (ok) { store.excluirConjunto(cfg.id); ui.conjuntoSel = 'global'; ui.geral = null; toast('Conjunto excluído'); }
+        }}>${ic('trash')} Excluir</button>` : nothing}
+      </div>
+    </div>
+    <div class="aviso info">${ic('users-three', 'fill')}<div>${padrao
+      ? html`O <b>padrão da empresa</b> vale para toda operação sem conjunto próprio.`
+      : html`Este conjunto vale para as operações marcadas abaixo e para os setores que o escolherem.`}
+      Os valores são compartilhados com <b>toda a equipe</b>${store.sync.modo === 'pasta' ? ' (ficam na pasta compartilhada)' : store.sync.modo === 'sharepoint' ? ' (ficam no SharePoint)' : ''} e afetam o tempo padrão e a produtividade das atividades que o usam.</div></div>
     <div class="grade g2">
       <section class="cartao stack"><h3 class="row">${ic('calendar', 'duo')} Jornada e calendário ${ajuda('produtividade')}</h3>
         <div class="grade-form">
@@ -69,10 +197,11 @@ function abaGeral() {
         </div></section>
     </div>
     <div class="row">
-      <button class="btn primario" ?disabled=${!alterado} @click=${() => { store.salvarConfig(g); ui.geral = null; toast('Parâmetros salvos — tudo foi recalculado'); }}>${ic('check')} Salvar parâmetros</button>
+      <button class="btn primario" ?disabled=${!alterado} @click=${() => { store.salvarConjunto(cfg.id, g); ui.geral = null; toast(`"${cfg.nome}" salvo — os cálculos foram refeitos`); }}>${ic('check')} Salvar "${cfg.nome}"</button>
       ${alterado ? html`<button class="btn" @click=${() => { ui.geral = null; atualizar(); }}>Descartar</button>` : nothing}
-      <button class="btn fantasma" @click=${() => { ui.geral = { ...CONFIG_PADRAO }; atualizar(); }}>Restaurar padrões</button>
+      <button class="btn fantasma" @click=${() => { ui.geral = valoresDe(CONFIG_PADRAO); atualizar(); }}>Restaurar valores de fábrica</button>
     </div>
+    ${painelUso(cfg)}
   </div>`;
 }
 
@@ -398,7 +527,7 @@ export function telaConfiguracoes(rota) {
     ['dados', 'Importar e exportar', 'arrows-down-up'],
     ['historico', 'Histórico', 'clock-counter-clockwise'],
   ];
-  const corpo = { geral: abaGeral, preferencias: abaPreferencias, banco: abaDados, dados: abaImportar, historico: abaHistorico }[aba] || abaGeral;
+  const corpo = { geral: () => abaGeral(rota), preferencias: abaPreferencias, banco: abaDados, dados: abaImportar, historico: abaHistorico }[aba] || (() => abaGeral(rota));
   return {
     titulo: 'Configurações',
     migalhas: [{ rotulo: 'Configurações' }],

@@ -91,7 +91,7 @@ export function montarPlanilha(XLSX, { diario, exclusoes, info, nomes }) {
     },
     paradas: e => ({ 'Nome': e.nome, 'Tipo': e.tipo === 'programada' ? 'Parada programada' : 'Motivo de anomalia', 'Duração (s)': e.duracao ?? '', 'Frequência': e.tipo === 'programada' ? (e.freq === 'ciclo' ? 'Por ciclo' : 'Por jornada') : '' }),
     fluxos: e => ({ 'Nome': e.nome }),
-    config: () => ({ 'Registro': 'Parâmetros gerais' }),
+    config: e => ({ 'Conjunto de parâmetros': e.id === 'global' ? 'Padrão da empresa' : e.nome || '', 'Jornada (min)': e.jornadaMin ?? '', 'Dias/mês': e.diasMes ?? '' }),
   };
   for (const [col, aba] of Object.entries(ABAS)) {
     const itens = Object.values(diario[col] || {});

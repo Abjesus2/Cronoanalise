@@ -54,7 +54,7 @@ export const AJUDA = {
     icone: 'trend-up',
     oque: 'Quantas unidades são produzidas em cada período, a partir do tempo padrão. "Por pessoa" considera 1 pessoa; "Equipe" multiplica pelas pessoas alocadas na operação; "Planejada" aplica a eficiência meta da empresa.',
     formula: 'Por minuto = 60 ÷ TP(s)\nPor hora = 3.600 ÷ TP(s)\nPor dia = jornada (s) ÷ TP(s)\nPor semana / mês / ano = por dia × dias úteis do período',
-    leitura: 'Os dias úteis por semana, mês e ano e a jornada diária são definidos em Configurações › Parâmetros gerais.',
+    leitura: 'A jornada diária e os dias úteis por semana, mês e ano vêm do conjunto de parâmetros gerais da operação (ou do setor). Cada operação pode ter o seu conjunto — veja Configurações › Parâmetros gerais.',
   },
   ciclos: {
     titulo: 'Confiabilidade da amostra (nº de ciclos)',
